@@ -325,6 +325,3 @@ def unregister():
     bpy.utils.unregister_class(LAZYCHIP_OP_applydamage)
     bpy.utils.unregister_class(LAZYCHIP_OP_clearstash)
     bpy.utils.unregister_class(LAZYCHIP_OP_removedamage)
-
-if __name__ == "__main__":
-    register()

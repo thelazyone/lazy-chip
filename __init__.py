@@ -1,6 +1,7 @@
 import bpy
 from . import ui
 from . import preset_operators
+from . import damage
 
 bl_info = {
     "name": "Lazy Chip",
@@ -25,10 +26,10 @@ def register_classes_from_module(module):
                 
 
 def register():
-
     # Registering the other files first:
     ui.register()
     preset_operators.register()
+    damage.register()
     
     # # TODO maybe redundant?
     # register_classes_from_module(ui)
@@ -42,6 +43,7 @@ def register():
 def unregister():
     ui.unregister()
     preset_operators.unregister()
+    damage.register()
 
     del bpy.types.Scene.weathering_props
 
