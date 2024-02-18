@@ -17,15 +17,15 @@ class WeatheringProps(PropertyGroup):
 
 class WeatheringPanel(Panel):
     bl_label = "Lazy Chip"
-    bl_idname = "PT_LazyChip"
+    bl_idname = "LazyChip"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = 'Weathering'
+    bl_category = 'Lazy Tools'
 
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        scene_pointer = scene.pointer_property
+        scene_pointer = scene.weathering_props
         curr_column = layout.column()
         curr_column.label(text="Lazy Chip", icon='CUBE')
         curr_column = layout.column(align=True)
@@ -57,10 +57,16 @@ class WeatheringPanel(Panel):
             [curr_object.name for curr_object in context.selected_objects if curr_object.type == 'MESH']))
         curr_column = layout.column(align=True)
         curr_column.scale_y = 1.5
+
+        curr_column.separator()
         curr_column.prop(scene_pointer, "attempts_property")
         curr_column.operator("lazychip.op_removedamage")
         curr_column.operator("lazychip.op_applydamage")
         curr_column.operator("lazychip.op_clearstash")
+
+        curr_column.separator()
+        curr_column.operator("lazychip.op_fixmanifold")
+
         curr_column = layout.column(align=True)
         curr_column.label(text="Proportions:")
         curr_column.prop(scene_pointer, "fixed_scale_check_property")
@@ -69,10 +75,10 @@ class WeatheringPanel(Panel):
 # TO BE DONE PROPERLY
 class LazyChipInfoPanel(Panel):
     bl_label = "Info"
-    bl_idname = "PT_LazyChip"
+    bl_idname = "LazyChip"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_parent_id = 'PT_LazyChip'
+    bl_parent_id = 'LazyChip'
     bl_options = {'DEFAULT_CLOSED'}
     def draw(self, context):
         layout = self.layout

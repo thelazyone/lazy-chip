@@ -2,14 +2,16 @@ import bpy
 from . import ui
 from . import preset_operators
 from . import damage
+from . import mesh_operators
+
 
 bl_info = {
     "name": "Lazy Chip",
     "author": "thelazyone",
-    "location": "View3d > Toolbar > Weathering",
+    "location": "View3d > Toolbar > Lazy Tools",
     "blender": (4, 0, 0),
     "category": "Object",
-    "version": (0, 0, 1),
+    "version": (1, 0, 0),
     "description": "A suite of tools for mesh weathering and manipulation."
 }
 
@@ -26,24 +28,22 @@ def register_classes_from_module(module):
                 
 
 def register():
+
     # Registering the other files first:
     ui.register()
     preset_operators.register()
+    mesh_operators.register()
     damage.register()
-    
-    # # TODO maybe redundant?
-    # register_classes_from_module(ui)
-    # register_classes_from_module(preset_operators)
 
-    # # Registering the weathering props
-    # bpy.utils.register_class(ui.WeatheringProps)
+    # Creating local variable
     bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=ui.WeatheringProps)
 
 
 def unregister():
     ui.unregister()
     preset_operators.unregister()
-    damage.register()
+    mesh_operators.unregister()
+    damage.unregister()
 
     del bpy.types.Scene.weathering_props
 

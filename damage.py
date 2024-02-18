@@ -183,22 +183,22 @@ class LAZYCHIP_OP_applydamage(Operator):
         context.view_layer.objects.active = i_selected_object
         bpy.ops.object.convert(target='MESH')
         scene = context.scene
-        curr_resolution_property = scene.pointer_property.resolution_property
+        curr_resolution_property = scene.weathering_props.resolution_property
         curr_dimensions = i_selected_object.dimensions
         curr_scale = i_selected_object.scale
         all_dimensions_ratio = min(curr_dimensions.x/curr_scale.x, min(
             curr_dimensions.y/curr_scale.y, curr_dimensions.z/curr_scale.z))
-        if scene.pointer_property.fixed_scale_check_property:
-            all_dimensions_ratio = scene.pointer_property.fixed_scale_property
+        if scene.weathering_props.fixed_scale_check_property:
+            all_dimensions_ratio = scene.weathering_props.fixed_scale_property
         rescaled_ratio = all_dimensions_ratio / curr_resolution_property
         new_remesh_modifier = i_selected_object.modifiers.new("Remesh", 'REMESH')
         new_remesh_modifier.voxel_size = rescaled_ratio
         new_remesh_modifier.use_smooth_shade = False
-        edge_relax_value = scene.pointer_property.edge_relax_property
+        edge_relax_value = scene.weathering_props.edge_relax_property
         new_smooth_property = i_selected_object.modifiers.new("Smooth", 'SMOOTH')
         new_smooth_property.iterations = int(curr_resolution_property*edge_relax_value)
-        edge_push_value = scene.pointer_property.edge_push_property
-        rescaled_noise_value = scene.pointer_property.noise_strength_property * \
+        edge_push_value = scene.weathering_props.edge_push_property
+        rescaled_noise_value = scene.weathering_props.noise_strength_property * \
             rescaled_ratio
         new_displace_modifier = i_selected_object.modifiers.new(
             "Displace", 'DISPLACE')
@@ -206,7 +206,7 @@ class LAZYCHIP_OP_applydamage(Operator):
         new_displace_modifier.mid_level = 1.0 - edge_push_value
         new_displace_modifier.texture_coords = 'GLOBAL'
         random.seed(
-            scene.pointer_property.seed_property)
+            scene.weathering_props.seed_property)
         random1 = random.uniform(-99.9, 99.9)
         random2 = random.uniform(-99.9, 99.9)
         random3 = random.uniform(-99.9, 99.9)
@@ -214,9 +214,9 @@ class LAZYCHIP_OP_applydamage(Operator):
         i_selected_object.location.y += random2
         i_selected_object.location.z += random3
         static_noise_depth = 4
-        rescaled_noise_scale = scene.pointer_property.noise_scale_property / \
+        rescaled_noise_scale = scene.weathering_props.noise_scale_property / \
             200 * all_dimensions_ratio
-        contrast_property = scene.pointer_property.noise_contrast_property
+        contrast_property = scene.weathering_props.noise_contrast_property
         noise_modifier = bpy.data.textures.new('Clouds', type='CLOUDS')
         noise_modifier.noise_basis = 'IMPROVED_PERLIN'
         noise_modifier.noise_scale = rescaled_noise_scale
@@ -254,8 +254,8 @@ class LAZYCHIP_OP_applydamage(Operator):
         for current_mesh in all_meshes:
 
             # Updating the seed and removing the current damage
-            if scene.pointer_property.random_seed_property:
-                scene.pointer_property.seed_property = random.randint(0, 999999)
+            if scene.weathering_props.random_seed_property:
+                scene.weathering_props.seed_property = random.randint(0, 999999)
             self.remove_damage(context, current_mesh)
             context.view_layer.objects.active = current_mesh
             
@@ -304,8 +304,8 @@ class LAZYCHIP_OP_applydamage(Operator):
             curr_object for curr_object in all_meshes if not self.is_watertight_mesh(curr_object)]
         watertight_iteration = 0;
         while len(all_meshes) > 0:
-            if watertight_iteration >= scene.pointer_property.attempts_property - 1:
-                self.report({'ERROR'}, "Reached max level of iterations (" + str(scene.pointer_property.attempts_property) + ")")
+            if watertight_iteration >= scene.weathering_props.attempts_property - 1:
+                self.report({'ERROR'}, "Reached max level of iterations (" + str(scene.weathering_props.attempts_property) + ")")
                 break
                 
             watertight_iteration = watertight_iteration + 1
