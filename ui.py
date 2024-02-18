@@ -1,7 +1,6 @@
 import bpy
-from bpy.types import Panel, Operator
-from bpy.props import PointerProperty
-from .presets import DamagePresets
+from bpy.types import Panel, PropertyGroup
+from bpy.props import IntProperty, FloatProperty, PointerProperty
 
 class WeatheringProps(PropertyGroup):
     resolution_property: IntProperty(name="Resolution", default=64, min=16, max=4096)
@@ -42,7 +41,7 @@ class WeatheringPanel(Panel):
         curr_column = layout.column(align=True)
         curr_column.prop(scene_pointer, "seed_property")
         curr_column.prop(scene_pointer, "random_seed_property")
-        curr_column.operator("lazychip.op_resetsettings")
+        curr_column.operator("lazychip.op_setdefaultsettings")
         curr_column.label(text="Wood:")
         curr_column.operator("lazychip.op_woodsmoothing")
         curr_column.operator("lazychip.op_woodchipping")

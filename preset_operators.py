@@ -18,6 +18,7 @@ class LAZYCHIP_OP_woodsmoothing(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
+    
 class LAZYCHIP_OP_woodchipping(Operator):
     bl_label = "Set Wood Chipping"
     bl_idname = "lazychip.op_woodchipping"
@@ -34,6 +35,7 @@ class LAZYCHIP_OP_woodchipping(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
+    
 class LAZYCHIP_OP_stonemarbling(Operator):
     bl_label = "Set Stone Marbling"
     bl_idname = "lazychip.op_stonemarbling"
@@ -50,6 +52,7 @@ class LAZYCHIP_OP_stonemarbling(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 3.0
         return {'FINISHED'}
+    
 class LAZYCHIP_OP_stonechipping(Operator):
     bl_label = "Set Stone Chipping"
     bl_idname = "lazychip.op_stonechipping"
@@ -66,6 +69,7 @@ class LAZYCHIP_OP_stonechipping(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
+    
 class LAZYCHIP_OP_stoneweathering(Operator):
     bl_label = "Set Stone Weathering"
     bl_idname = "lazychip.op_stoneweathering"
@@ -82,6 +86,7 @@ class LAZYCHIP_OP_stoneweathering(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 2.0
         return {'FINISHED'}
+    
 class LAZYCHIP_OP_concretechippingsurface(Operator):
     bl_label = "Set Concrete Chipping Surface"
     bl_idname = "lazychip.op_concretechippingsurface"
@@ -98,6 +103,7 @@ class LAZYCHIP_OP_concretechippingsurface(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
+    
 class LAZYCHIP_OP_concretechippingedges(Operator):
     bl_label = "Set Concrete Chipping Edges"
     bl_idname = "lazychip.op_concretechippingedges"
@@ -115,21 +121,42 @@ class LAZYCHIP_OP_concretechippingedges(Operator):
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
 
+class LAZYCHIP_OP_setdefaultsettings(Operator):
+    bl_label = "Reset Settings"
+    bl_idname = "lazychip.op_setdefaultsettings "
+    def execute(self, context):
+        pointer_property = context.scene.pointer_property
+        pointer_property.resolution_property = 64
+        pointer_property.edge_relax_property = 3.0
+        pointer_property.edge_push_property = 0.7
+        pointer_property.noise_scale_property = 40
+        pointer_property.noise_strength_property = 8.0
+        pointer_property.noise_contrast_property = 1.0
+        pointer_property.seed_property = 0
+        pointer_property.random_seed_property = True
+        pointer_property.fixed_scale_check_property = False
+        pointer_property.fixed_scale_property = 1.0
+        return {'FINISHED'}
+    
+    
+def register():
+    bpy.utils.register_class(LAZYCHIP_OP_woodsmoothing)
+    bpy.utils.register_class(LAZYCHIP_OP_woodchipping)
+    bpy.utils.register_class(LAZYCHIP_OP_stonemarbling)
+    bpy.utils.register_class(LAZYCHIP_OP_stonechipping)
+    bpy.utils.register_class(LAZYCHIP_OP_stoneweathering)
+    bpy.utils.register_class(LAZYCHIP_OP_concretechippingsurface)
+    bpy.utils.register_class(LAZYCHIP_OP_concretechippingedges)
 
+    bpy.utils.register_class(LAZYCHIP_OP_setdefaultsettings)
 
-# class LAZYCHIP_OP_resetsettings(Operator):
-#     bl_label = "Reset Settings"
-#     bl_idname = "lazychip.op_resetsettings "
-#     def execute(self, context):
-#         pointer_property = context.scene.pointer_property
-#         pointer_property.resolution_property = 64
-#         pointer_property.edge_relax_property = 3.0
-#         pointer_property.edge_push_property = 0.7
-#         pointer_property.noise_scale_property = 40
-#         pointer_property.noise_strength_property = 8.0
-#         pointer_property.noise_contrast_property = 1.0
-#         pointer_property.seed_property = 0
-#         pointer_property.random_seed_property = True
-#         pointer_property.fixed_scale_check_property = False
-#         pointer_property.fixed_scale_property = 1.0
-#         return {'FINISHED'}
+def unregister():
+    bpy.utils.unregister_class(LAZYCHIP_OP_woodsmoothing)
+    bpy.utils.unregister_class(LAZYCHIP_OP_woodchipping)
+    bpy.utils.unregister_class(LAZYCHIP_OP_stonemarbling)
+    bpy.utils.unregister_class(LAZYCHIP_OP_stonechipping)
+    bpy.utils.unregister_class(LAZYCHIP_OP_stoneweathering)
+    bpy.utils.unregister_class(LAZYCHIP_OP_concretechippingsurface)
+    bpy.utils.unregister_class(LAZYCHIP_OP_concretechippingedges)
+
+    bpy.utils.unregister_class(LAZYCHIP_OP_setdefaultsettings)

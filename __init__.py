@@ -25,11 +25,18 @@ def register_classes_from_module(module):
                 
 
 def register():
-    bpy.utils.register_class(ui.WeatheringProps)
-    register_classes_from_module(ui)
-    register_classes_from_module(preset_operators)
+
+    # Registering the other files first:
+    ui.register()
+    preset_operators.register()
     
-    bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=ui.WeatheringProps)
+    # # TODO maybe redundant?
+    # register_classes_from_module(ui)
+    # register_classes_from_module(preset_operators)
+
+    # # Registering the weathering props
+    # bpy.utils.register_class(ui.WeatheringProps)
+    # bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=ui.WeatheringProps)
 
 
 def unregister():
