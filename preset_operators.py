@@ -1,22 +1,10 @@
-class POLYDAMAGE_OP_resetsettings(Operator):
-    bl_label = "Reset Settings"
-    bl_idname = "polydamage.op_resetsettings"
-    def execute(self, context):
-        pointer_property = context.scene.pointer_property
-        pointer_property.resolution_property = 64
-        pointer_property.edge_relax_property = 3.0
-        pointer_property.edge_push_property = 0.7
-        pointer_property.noise_scale_property = 40
-        pointer_property.noise_strength_property = 8.0
-        pointer_property.noise_contrast_property = 1.0
-        pointer_property.seed_property = 0
-        pointer_property.random_seed_property = True
-        pointer_property.fixed_scale_check_property = False
-        pointer_property.fixed_scale_property = 1.0
-        return {'FINISHED'}
-class POLYDAMAGE_OP_woodsmoothing(Operator):
+import bpy
+from bpy.types import Operator
+
+
+class LAZYCHIP_OP_woodsmoothing(Operator):
     bl_label = "Set Wood Smoothing"
-    bl_idname = "polydamage.op_woodsmoothing"
+    bl_idname = "lazychip.op_woodsmoothing"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -30,9 +18,9 @@ class POLYDAMAGE_OP_woodsmoothing(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
-class POLYDAMAGE_OP_woodchipping(Operator):
+class LAZYCHIP_OP_woodchipping(Operator):
     bl_label = "Set Wood Chipping"
-    bl_idname = "polydamage.op_woodchipping"
+    bl_idname = "lazychip.op_woodchipping"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -46,9 +34,9 @@ class POLYDAMAGE_OP_woodchipping(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
-class POLYDAMAGE_OP_stonemarbling(Operator):
+class LAZYCHIP_OP_stonemarbling(Operator):
     bl_label = "Set Stone Marbling"
-    bl_idname = "polydamage.op_stonemarbling"
+    bl_idname = "lazychip.op_stonemarbling"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -62,9 +50,9 @@ class POLYDAMAGE_OP_stonemarbling(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 3.0
         return {'FINISHED'}
-class POLYDAMAGE_OP_stonechipping(Operator):
+class LAZYCHIP_OP_stonechipping(Operator):
     bl_label = "Set Stone Chipping"
-    bl_idname = "polydamage.op_stonechipping"
+    bl_idname = "lazychip.op_stonechipping"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -78,9 +66,9 @@ class POLYDAMAGE_OP_stonechipping(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
-class POLYDAMAGE_OP_stoneweathering(Operator):
+class LAZYCHIP_OP_stoneweathering(Operator):
     bl_label = "Set Stone Weathering"
-    bl_idname = "polydamage.op_stoneweathering"
+    bl_idname = "lazychip.op_stoneweathering"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -94,9 +82,9 @@ class POLYDAMAGE_OP_stoneweathering(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 2.0
         return {'FINISHED'}
-class POLYDAMAGE_OP_concretechippingsurface(Operator):
+class LAZYCHIP_OP_concretechippingsurface(Operator):
     bl_label = "Set Concrete Chipping Surface"
-    bl_idname = "polydamage.op_concretechippingsurface"
+    bl_idname = "lazychip.op_concretechippingsurface"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -110,9 +98,9 @@ class POLYDAMAGE_OP_concretechippingsurface(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
-class POLYDAMAGE_OP_concretechippingedges(Operator):
+class LAZYCHIP_OP_concretechippingedges(Operator):
     bl_label = "Set Concrete Chipping Edges"
-    bl_idname = "polydamage.op_concretechippingedges"
+    bl_idname = "lazychip.op_concretechippingedges"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
@@ -126,3 +114,22 @@ class POLYDAMAGE_OP_concretechippingedges(Operator):
         pointer_property.fixed_scale_check_property = True
         pointer_property.fixed_scale_property = 4.0
         return {'FINISHED'}
+
+
+
+# class LAZYCHIP_OP_resetsettings(Operator):
+#     bl_label = "Reset Settings"
+#     bl_idname = "lazychip.op_resetsettings "
+#     def execute(self, context):
+#         pointer_property = context.scene.pointer_property
+#         pointer_property.resolution_property = 64
+#         pointer_property.edge_relax_property = 3.0
+#         pointer_property.edge_push_property = 0.7
+#         pointer_property.noise_scale_property = 40
+#         pointer_property.noise_strength_property = 8.0
+#         pointer_property.noise_contrast_property = 1.0
+#         pointer_property.seed_property = 0
+#         pointer_property.random_seed_property = True
+#         pointer_property.fixed_scale_check_property = False
+#         pointer_property.fixed_scale_property = 1.0
+#         return {'FINISHED'}

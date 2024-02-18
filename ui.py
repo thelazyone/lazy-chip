@@ -3,22 +3,22 @@ from bpy.types import Panel, Operator
 from bpy.props import PointerProperty
 from .presets import DamagePresets
 
-class PolyDamageProps(bpy.types.PropertyGroup):
-    resolution_property: bpy.props.IntProperty(name="Resolution", default=DamagePresets.resolution_default, min=DamagePresets.resolution_min, max=DamagePresets.resolution_max)
-    edge_relax_property: bpy.props.FloatProperty(name="Edge Relax", default=DamagePresets.edge_relax_default, min=DamagePresets.edge_relax_min, max=DamagePresets.edge_relax_max)
-    edge_push_property: bpy.props.FloatProperty(name="Edge Push", default=DamagePresets.edge_push_default, min=DamagePresets.edge_push_min, max=DamagePresets.edge_push_max)
-    noise_scale_property: bpy.props.FloatProperty(name="Noise Scale", default=DamagePresets.noise_scale_default, min=DamagePresets.noise_scale_min, max=DamagePresets.noise_scale_max)
-    noise_strength_property: bpy.props.FloatProperty(name="Noise Strength", default=DamagePresets.noise_strength_default, min=DamagePresets.noise_strength_min, max=DamagePresets.noise_strength_max)
-    noise_contrast_property: bpy.props.FloatProperty(name="Noise Contrast", default=DamagePresets.noise_contrast_default, min=DamagePresets.noise_contrast_min, max=DamagePresets.noise_contrast_max)
-    seed_property: bpy.props.IntProperty(name="Seed", default=DamagePresets.seed_default, min=DamagePresets.seed_min, max=DamagePresets.seed_max)
-    random_seed_property: bpy.props.BoolProperty(name="Random Seed", default=DamagePresets.random_seed_default)
-    fixed_scale_check_property: bpy.props.BoolProperty(name="Use Fixed Scale", default=DamagePresets.fixed_scale_check_default)
-    fixed_scale_property: bpy.props.FloatProperty(name="Fixed Scale", default=DamagePresets.fixed_scale_default, min=DamagePresets.fixed_scale_min, max=DamagePresets.fixed_scale_max)
-    attempts_property: bpy.props.IntProperty(name="Attempts", default=DamagePresets.attempts_default, min=DamagePresets.attempts_min, max=DamagePresets.attempts_max)
+class WeatheringProps(PropertyGroup):
+    resolution_property: IntProperty(name="Resolution", default=64, min=16, max=4096)
+    edge_relax_property: FloatProperty(name="Edge Relax", default=3.0, min=0, max=2048)
+    edge_push_property: FloatProperty(name="Edge Push", default=0.7, min=0.0, max=1.0)
+    noise_scale_property: FloatProperty(name="Noise Scale", default=40, min=0, max=8192)
+    noise_strength_property: FloatProperty(name="Noise Strength", default=8.0, min=0, max=8192)
+    noise_contrast_property: FloatProperty(name="Noise Contrast", default=1.0, min=0, max=1024)
+    seed_property: IntProperty(name="Seed", default=0, min=0, max=999999)
+    random_seed_property: bpy.props.BoolProperty(name="Random Seed", default=True)
+    fixed_scale_check_property: bpy.props.BoolProperty(name="Use Fixed Scale", default=False)
+    fixed_scale_property: FloatProperty(name="Noise Scale", default=1, min=0, max=20)
+    attempts_property: IntProperty(name="Attempts", default=5, min=1, max=100, description="Number of times the script attempts to apply its logic before giving up")
 
-class PolyDamagePanel(Panel):
-    bl_label = "PolyDamage"
-    bl_idname = "PT_PolyDamage"
+class WeatheringPanel(Panel):
+    bl_label = "Lazy Chip"
+    bl_idname = "PT_LazyChip"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Weathering'
@@ -26,44 +26,75 @@ class PolyDamagePanel(Panel):
     def draw(self, context):
         layout = self.layout
         scene = context.scene
-        scene_pointer = scene.poly_damage_props
+        scene_pointer = scene.pointer_property
+        curr_column = layout.column()
+        curr_column.label(text="Lazy Chip", icon='CUBE')
+        curr_column = layout.column(align=True)
+        curr_column.label(text="Settings:")
+        curr_column.prop(scene_pointer, "resolution_property")
+        curr_column = layout.column(align=True)
+        curr_column.prop(scene_pointer, "edge_relax_property")
+        curr_column.prop(scene_pointer, "edge_push_property")
+        curr_column = layout.column(align=True)
+        curr_column.prop(scene_pointer, "noise_scale_property")
+        curr_column.prop(scene_pointer, "noise_strength_property")
+        curr_column.prop(scene_pointer, "noise_contrast_property")
+        curr_column = layout.column(align=True)
+        curr_column.prop(scene_pointer, "seed_property")
+        curr_column.prop(scene_pointer, "random_seed_property")
+        curr_column.operator("lazychip.op_resetsettings")
+        curr_column.label(text="Wood:")
+        curr_column.operator("lazychip.op_woodsmoothing")
+        curr_column.operator("lazychip.op_woodchipping")
+        curr_column.label(text="Stone:")
+        curr_column.operator("lazychip.op_stonemarbling")
+        curr_column.operator("lazychip.op_stonechipping")
+        curr_column.operator("lazychip.op_stoneweathering")
+        curr_column.label(text="Concrete:")
+        curr_column.operator("lazychip.op_concretechippingsurface")
+        curr_column.operator("lazychip.op_concretechippingedges")
+        curr_column = layout.column()
+        curr_column.label(text="Selected objects: " + str(
+            [curr_object.name for curr_object in context.selected_objects if curr_object.type == 'MESH']))
+        curr_column = layout.column(align=True)
+        curr_column.scale_y = 1.5
+        curr_column.prop(scene_pointer, "attempts_property")
+        curr_column.operator("lazychip.op_removedamage")
+        curr_column.operator("lazychip.op_applydamage")
+        curr_column.operator("lazychip.op_clearstash")
+        curr_column = layout.column(align=True)
+        curr_column.label(text="Proportions:")
+        curr_column.prop(scene_pointer, "fixed_scale_check_property")
+        curr_column.prop(scene_pointer, "fixed_scale_property")
 
-        layout.prop(scene_pointer, "resolution_property")
-        layout.prop(scene_pointer, "edge_relax_property")
-        layout.prop(scene_pointer, "edge_push_property")
-        layout.prop(scene_pointer, "noise_scale_property")
-        layout.prop(scene_pointer, "noise_strength_property")
-        layout.prop(scene_pointer, "noise_contrast_property")
-        layout.prop(scene_pointer, "seed_property")
-        layout.prop(scene_pointer, "random_seed_property")
-        layout.prop(scene_pointer, "fixed_scale_check_property")
-        layout.prop(scene_pointer, "fixed_scale_property")
-        layout.prop(scene_pointer, "attempts_property")
-
-        # Example operator button
-        layout.operator("polydamage.apply_damage")
-
-# Example operator class
-class POLYDAMAGE_OP_applydamage(Operator):
-    bl_label = "Apply Damage"
-    bl_idname = "polydamage.apply_damage"
-
-    def execute(self, context):
-        # Placeholder for operator logic
-        self.report({'INFO'}, "Damage Applied")
-        return {'FINISHED'}
+# TO BE DONE PROPERLY
+class LazyChipInfoPanel(Panel):
+    bl_label = "Info"
+    bl_idname = "PT_LazyChip"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'PT_LazyChip'
+    bl_options = {'DEFAULT_CLOSED'}
+    def draw(self, context):
+        layout = self.layout
+        curr_column = layout.column()
+        curr_column.label(text="About Lazy Chip", icon='INFO')
+        curr_column.label(text="Lazy Chip by The Lazy Forger")
+        curr_separator = layout.separator()
+        curr_column = layout.column(align=True)
+        curr_column.label(text="https://github.com/thelazyone/lazy-chip")
+        curr_column.label(text="https://www.myminifactory.com/users/TheLazyForger")
 
 def register():
-    bpy.utils.register_class(PolyDamageProps)
-    bpy.types.Scene.poly_damage_props = PointerProperty(type=PolyDamageProps)
-    bpy.utils.register_class(PolyDamagePanel)
-    bpy.utils.register_class(POLYDAMAGE_OP_applydamage)
+    # Adding the params sliders:
+    bpy.utils.register_class(WeatheringProps)
+    bpy.types.Scene.weathering_props = PointerProperty(type=WeatheringProps)
+    bpy.utils.register_class(WeatheringPanel)
 
 def unregister():
-    bpy.utils.unregister_class(PolyDamageProps)
-    del bpy.types.Scene.poly_damage_props
-    bpy.utils.unregister_class(PolyDamagePanel)
-    bpy.utils.unregister_class(POLYDAMAGE_OP_applydamage)
+    bpy.utils.unregister_class(WeatheringProps)
+    del bpy.types.Scene.weathering_props
+    bpy.utils.unregister_class(WeatheringPanel)
 
 if __name__ == "__main__":
     register()

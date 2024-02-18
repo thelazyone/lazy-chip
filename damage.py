@@ -45,15 +45,15 @@ def clone_object(context, i_selected_object):
     context.collection.objects.link(object_copy)
     return object_copy
 
-class POLYDAMAGE_OP_removedamage(Operator):
+class LAZYCHIP_OP_removedamage(Operator):
     bl_label = "Remove Damage"
-    bl_idname = "polydamage.op_removedamage"
+    bl_idname = "lazychip.op_removedamage"
     bl_options = {'REGISTER', 'UNDO'}
     
     def remove_damage(self, context, i_selected_object):
-        if '_polydamaged' in i_selected_object.data.name:
+        if '_chipped' in i_selected_object.data.name:
             selected_name = i_selected_object.data.name
-            selected_name_split = selected_name.split('_polydamaged', 1)[0]
+            selected_name_split = selected_name.split('_chipped', 1)[0]
             if bpy.data.meshes.find(selected_name_split) != -1:
                 i_selected_object.data = bpy.data.meshes[selected_name_split]
                 bpy.data.meshes.remove(
@@ -75,16 +75,16 @@ class POLYDAMAGE_OP_removedamage(Operator):
             self.remove_damage(context, i_selected_object)
         return {'FINISHED'}
     
-    
-class POLYDAMAGE_OP_clearstash(Operator):
+
+class LAZYCHIP_OP_clearstash(Operator):
     bl_label = "Clear Stash"
-    bl_idname = "polydamage.op_clearstash"
+    bl_idname = "lazychip.op_clearstash"
     bl_options = {'REGISTER', 'UNDO'}
     
     def clear_stash(self, context, i_selected_object):
-        if '_polydamaged' in i_selected_object.data.name:
+        if '_chipped' in i_selected_object.data.name:
             selected_name = i_selected_object.data.name
-            selected_name_split = selected_name.split('_polydamaged', 1)[0]
+            selected_name_split = selected_name.split('_chipped', 1)[0]
             if bpy.data.meshes.find(selected_name_split) != -1:
                 i_selected_object.data.name = selected_name_split + "_applied" 
                 # i_selected_object.data = bpy.data.meshes[selected_name_split]
@@ -108,9 +108,9 @@ class POLYDAMAGE_OP_clearstash(Operator):
             self.clear_stash(context, i_selected_object)
         return {'FINISHED'}
 
-class POLYDAMAGE_OP_applydamage(Operator):
+class LAZYCHIP_OP_applydamage(Operator):
     bl_label = "Apply Damage"
-    bl_idname = "polydamage.op_applydamage"
+    bl_idname = "lazychip.op_applydamage"
     bl_options = {'REGISTER', 'UNDO'}
     
     # Testing watertight. Using https://blender.stackexchange.com/questions/160055/is-there-a-way-to-use-the-terminal-to-check-if-a-mesh-is-watertight
@@ -164,10 +164,10 @@ class POLYDAMAGE_OP_applydamage(Operator):
         
 
     def remove_damage(self, context, i_selected_object):
-        if '_polydamaged' in i_selected_object.data.name:
+        if '_chipped' in i_selected_object.data.name:
             selected_name = i_selected_object.data.name
             # assign the original mesh back
-            selected_name_split = selected_name.split('_polydamaged', 1)[0]
+            selected_name_split = selected_name.split('_chipped', 1)[0]
             if bpy.data.meshes.find(selected_name_split) != -1:
                 i_selected_object.data = bpy.data.meshes[selected_name_split]
                 bpy.data.meshes.remove(
@@ -265,7 +265,7 @@ class POLYDAMAGE_OP_applydamage(Operator):
             
             # Creating a temporary clone and renaming it 
             object_copy = self.clone_object(context, current_mesh)
-            object_copy.data.name = current_mesh.data.name + '_polydamaged'
+            object_copy.data.name = current_mesh.data.name + '_chipped'
             copied_matrix_basis = object_copy.matrix_basis.copy()
             if hasattr(object_copy.data, "transform"):
                 object_copy.data.transform(copied_matrix_basis)
@@ -280,7 +280,7 @@ class POLYDAMAGE_OP_applydamage(Operator):
                 
             # Tricking into creating this fake object
             current_mesh.data.use_fake_user = True
-            object_copy.name = "PolyDamage_tempObject"
+            object_copy.name = "LazyChip_tempObject"
             current_mesh.data = object_copy.data
             bpy.data.objects.remove(object_copy, do_unlink=True)
             current_mesh.data.use_fake_user = True
@@ -317,12 +317,14 @@ class POLYDAMAGE_OP_applydamage(Operator):
         return {'FINISHED'}
 
 def register():
-    bpy.utils.register_class(POLYDAMAGE_OP_applydamage)
-    # Register other operators
+    bpy.utils.register_class(LAZYCHIP_OP_applydamage)
+    bpy.utils.register_class(LAZYCHIP_OP_clearstash)
+    bpy.utils.register_class(LAZYCHIP_OP_removedamage)
 
 def unregister():
-    bpy.utils.unregister_class(POLYDAMAGE_OP_applydamage)
-    # Unregister other operators
+    bpy.utils.unregister_class(LAZYCHIP_OP_applydamage)
+    bpy.utils.unregister_class(LAZYCHIP_OP_clearstash)
+    bpy.utils.unregister_class(LAZYCHIP_OP_removedamage)
 
 if __name__ == "__main__":
     register()

@@ -15,16 +15,26 @@ bl_info = {
 # Function to automatically register all classes from the modules
 def register_classes_from_module(module):
     for attr_name in dir(module):
+        print(f"Trying register {attr_name}")
         attr = getattr(module, attr_name)
         if isinstance(attr, type) and (issubclass(attr, bpy.types.Operator) or issubclass(attr, bpy.types.Panel)):
-            bpy.utils.register_class(attr)
+            try:
+                bpy.utils.register_class(attr)
+            except ValueError as e:
+                print(f"Skipping registration for {attr.__name__}: {e}")
+                
 
 def register():
+    bpy.utils.register_class(ui.WeatheringProps)
     register_classes_from_module(ui)
     register_classes_from_module(preset_operators)
-    bpy.types.Scene.poly_damage_props = bpy.props.PointerProperty(type=ui.PolyDamageProps)
+    
+    bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=ui.WeatheringProps)
+
 
 def unregister():
+    del bpy.types.Scene.weathering_props
+
     for attr_name in dir(preset_operators):
         attr = getattr(preset_operators, attr_name)
         if isinstance(attr, type) and (issubclass(attr, bpy.types.Operator) or issubclass(attr, bpy.types.Panel)):
@@ -33,7 +43,8 @@ def unregister():
         attr = getattr(ui, attr_name)
         if isinstance(attr, type) and (issubclass(attr, bpy.types.Operator) or issubclass(attr, bpy.types.Panel)):
             bpy.utils.unregister_class(attr)
-    del bpy.types.Scene.poly_damage_props
+    del bpy.types.Scene.weathering_props
+
 
 if __name__ == "__main__":
     register()
