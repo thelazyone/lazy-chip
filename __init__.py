@@ -36,20 +36,13 @@ def register():
 
     # # Registering the weathering props
     # bpy.utils.register_class(ui.WeatheringProps)
-    # bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=ui.WeatheringProps)
+    bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=ui.WeatheringProps)
 
 
 def unregister():
-    del bpy.types.Scene.weathering_props
+    ui.unregister()
+    preset_operators.unregister()
 
-    for attr_name in dir(preset_operators):
-        attr = getattr(preset_operators, attr_name)
-        if isinstance(attr, type) and (issubclass(attr, bpy.types.Operator) or issubclass(attr, bpy.types.Panel)):
-            bpy.utils.unregister_class(attr)
-    for attr_name in dir(ui):
-        attr = getattr(ui, attr_name)
-        if isinstance(attr, type) and (issubclass(attr, bpy.types.Operator) or issubclass(attr, bpy.types.Panel)):
-            bpy.utils.unregister_class(attr)
     del bpy.types.Scene.weathering_props
 
 

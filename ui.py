@@ -86,14 +86,27 @@ class LazyChipInfoPanel(Panel):
 
 def register():
     # Adding the params sliders:
-    bpy.utils.register_class(WeatheringProps)
-    bpy.types.Scene.weathering_props = PointerProperty(type=WeatheringProps)
-    bpy.utils.register_class(WeatheringPanel)
+    try:
+        bpy.utils.register_class(WeatheringProps)
+    except ValueError:
+        pass  # Class already registered, ignore
+    bpy.types.Scene.weathering_props = bpy.props.PointerProperty(type=WeatheringProps)
+    try:
+        bpy.utils.register_class(WeatheringPanel)
+    except ValueError:
+        pass  # Class already registered, ignore
 
 def unregister():
-    bpy.utils.unregister_class(WeatheringProps)
-    del bpy.types.Scene.weathering_props
-    bpy.utils.unregister_class(WeatheringPanel)
+    try:
+        bpy.utils.unregister_class(WeatheringPanel)
+    except ValueError:
+        pass  # Class wasn't registered, ignore
+    if hasattr(bpy.types.Scene, 'weathering_props'):
+        del bpy.types.Scene.weathering_props
+    try:
+        bpy.utils.unregister_class(WeatheringProps)
+    except ValueError:
+        pass  # Class wasn't registered, ignore
 
 if __name__ == "__main__":
     register()

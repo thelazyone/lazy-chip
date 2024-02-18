@@ -123,7 +123,7 @@ class LAZYCHIP_OP_concretechippingedges(Operator):
 
 class LAZYCHIP_OP_setdefaultsettings(Operator):
     bl_label = "Reset Settings"
-    bl_idname = "lazychip.op_setdefaultsettings "
+    bl_idname = "lazychip.op_setdefaultsettings"
     def execute(self, context):
         pointer_property = context.scene.pointer_property
         pointer_property.resolution_property = 64
