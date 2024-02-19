@@ -1,8 +1,8 @@
 bl_info = {
     "name": "Experimental Remesh and Fix",
-    "author": "Giacomo Pantalone + GPT4",
+    "author": "thelazyone",
     "version": (1, 0),
-    "blender": (2, 80, 0),
+    "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Decimate and crops meshes",
     "warning": "",

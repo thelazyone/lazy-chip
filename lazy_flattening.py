@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Lazy Z Flattener",
-    "author": "Giacomo Pantalone + GPT4",
-    "version": (0, 1),
+    "author": "thelazyone",
+    "version": (1, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Crops meshes along the Z axis",
