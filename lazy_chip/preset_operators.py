@@ -6,7 +6,7 @@ class LAZYCHIP_OP_woodsmoothing(Operator):
     bl_label = "Set Wood Smoothing"
     bl_idname = "lazychip.op_woodsmoothing"
     def execute(self, context):
-        weathering_props = context.scene.weat
+        weathering_props = context.scene.weathering_props
         weathering_props.resolution_property = 64
         weathering_props.edge_relax_property = 1.5
         weathering_props.edge_push_property = 0.9
