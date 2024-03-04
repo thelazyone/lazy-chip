@@ -12,7 +12,7 @@ from math import radians
 bl_info = {
     "name": "Smart Cracks",
     "author": "thelazyone",
-    "version": (1, 0, 0),
+    "version": (1, 0, 1),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Apply volumetric cracks with infill",
@@ -42,35 +42,40 @@ class operator_crack(Operator):
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.object.editmode_toggle()
 
-        # Moving the mouse handles the displacement
-        if event.type == 'MOUSEMOVE':
-            self.displace_cracker(context, event.mouse_x - self.mouse_x, event.mouse_y - self.mouse_y)
-            self.mouse_x, self.mouse_y = event.mouse_x, event.mouse_y
-        
-        # Mouse wheel handles the rotation of the crack
-        elif event.type == 'WHEELUPMOUSE' or event.type == 'WHEELDOWNMOUSE':  # Handle rotation
+        # Dragging:
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            self.dragging = True
+            self.mouse_x_init = event.mouse_x  # Update initial positions on drag start
+            self.mouse_y_init = event.mouse_y
+        elif self.dragging and event.type == 'MOUSEMOVE':
+            dx = event.mouse_x - self.mouse_x_init
+            dy = event.mouse_y - self.mouse_y_init
+            self.displace_cracker(context, dx, dy)
+            self.mouse_x_init, self.mouse_y_init = event.mouse_x, event.mouse_y 
+        elif event.type == 'LEFTMOUSE' and event.value == 'RELEASE':
+            self.dragging = False
+
+        elif event.type in {'WHEELUPMOUSE', 'WHEELDOWNMOUSE'}:
             self.rotate_cracker(context, event.type)
 
-        # Click or enter simply applies the modal operator
-        elif event.type in {'RET', 'NUMPAD_ENTER', 'LEFTMOUSE'}:  # Apply crack
-            if self.apply_crack(context):
-                return {'FINISHED'}
-            else:
-                return {'CANCELLED'}
-        elif event.type in {'RIGHTMOUSE', 'ESC'}:  # Cancel operation
+        elif event.type in {'RET', 'NUMPAD_ENTER'}:
+            return self.apply_crack(context)
+
+        elif event.type in {'RIGHTMOUSE', 'ESC'}:
             return {'CANCELLED'}
 
         return {'RUNNING_MODAL'}
 
         
     def invoke(self, context, event):
-        self.mouse_x, self.mouse_y = event.mouse_x, event.mouse_y
+        self.dragging = False 
+        self.mouse_x_init = event.mouse_x
+        self.mouse_y_init = event.mouse_y
         self.create_cracker(context)
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
     
     def create_cracker(self, context):
-
         # Ensure the texture exists before using it
         if "cracker_texture" not in bpy.data.textures:
             cracker_texture = bpy.data.textures.new(name="cracker_texture", type='CLOUDS')
@@ -78,6 +83,11 @@ class operator_crack(Operator):
             cracker_texture.noise_scale = 2.5
         else:
             cracker_texture = bpy.data.textures["cracker_texture"]
+
+        # Reading the settings from the panel
+        settings = context.scene.crack_settings
+        cracker_texture.noise_scale = settings.noise_scale
+
             
         # Store target obj
         targetName = bpy.context.object.name
@@ -136,24 +146,44 @@ class operator_crack(Operator):
 
         bpy.data.objects['cracker'].modifiers.new("Cracker_Displace", type='DISPLACE')
         bpy.data.objects['cracker'].modifiers["Cracker_Displace"].texture = cracker_texture
-        bpy.data.objects['cracker'].modifiers["Cracker_Displace"].strength = 0.5
+        bpy.data.objects['cracker'].modifiers["Cracker_Displace"].strength = settings.noise_intensity
 
         bpy.data.objects['cracker'].modifiers.new("Cracker_Solid", type='SOLIDIFY')
-        bpy.data.objects['cracker'].modifiers["Cracker_Solid"].thickness = 0.005
+        bpy.data.objects['cracker'].modifiers["Cracker_Solid"].thickness = settings.thickness
         bpy.data.objects['cracker'].modifiers["Cracker_Solid"].offset = 0
 
         bpy.data.objects[targetName].select_set(True)
         bpy.context.view_layer.objects.active = targetObj
 
         pass
+    
 
     def displace_cracker(self, context, dx, dy):
-        # Code to displace the cracker object based on mouse movement
-        pass
+        if self.dragging:
+            # Find the 3D View area to get its view matrix
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    view_matrix = area.spaces.active.region_3d.view_matrix
+                    break
+            else:
+                return  # No 3D View found, cannot proceed
+
+            # Convert screen displacement dx, dy into 3D space displacement
+            # Adjust the displacement scale factor as needed
+            scale_factor = 0.01  # Example scale factor, adjust based on your needs
+            displacement_vector = view_matrix.inverted().to_3x3() @ Vector((dx * scale_factor, dy * scale_factor, 0))
+            
+            # Apply the displacement to the cracker_empty object
+            cracker_empty = bpy.data.objects.get("cracker_empty")
+            if cracker_empty:
+                cracker_empty.location += displacement_vector
+
+
 
     def rotate_cracker(self, context, wheel_direction):
-        # Code to rotate the cracker object based on mouse wheel
-        pass
+        rotation_amount = radians(5) if wheel_direction == 'WHEELUPMOUSE' else radians(-5)
+        bpy.data.objects["cracker_empty"].rotation_euler[2] += rotation_amount
+
 
     def apply_crack(self, context):
         original_active_object = context.view_layer.objects.active  # Store the original active object
@@ -198,17 +228,8 @@ class operator_crack(Operator):
         original_active_object.select_set(True)
         context.view_layer.objects.active = original_active_object
 
-        return True
+        return {'FINISHED'}  # or return {'CANCELLED'} as needed
 
-    # def execute(self, context):
-    #     objects = context.selected_objects
-    #     total_objects = len(objects)
-    #     settings = context.scene.crack_settings
-
-    #     # Cracking here.      
-
-    #     self.report({'INFO'}, "Finished processing all objects")
-    #     return {'FINISHED'}
 
 class panel_crack(Panel):
     bl_idname = "LazyCrack"
