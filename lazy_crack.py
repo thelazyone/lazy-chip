@@ -12,7 +12,7 @@ from math import radians
 bl_info = {
     "name": "Smart Cracks",
     "author": "thelazyone",
-    "version": (1, 0, 4),
+    "version": (1, 0, 6),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Apply volumetric cracks with infill",
@@ -27,7 +27,7 @@ class crack_settings(bpy.types.PropertyGroup):
     noise_scale: bpy.props.FloatProperty(name="Noise Scale", default=1.5, min=0.1, max=10.0)
     noise_depth: bpy.props.IntProperty(name="Noise Depth", default=3, min=0, max=10)
     noise_resolution: bpy.props.IntProperty(name="Noise Resolution", default=6, min=3, max=7)
-    thickness: bpy.props.FloatProperty(name="Thickness", default=0.02, min=0.001, max=0.1)
+    thickness: bpy.props.FloatProperty(name="Thickness", default=0.2, min=0.01, max=0.5)
     noise_intensity: bpy.props.FloatProperty(name="Noise Intensity", default=1.6, min=0.1, max=10.0)
 
 
@@ -151,10 +151,6 @@ class operator_crack(Operator):
         crackerObj.parent = crackerEmpty
         crackerObj.matrix_parent_inverse = crackerEmpty.matrix_world.inverted()
 
-        # If "fill crack" is set, creating here the other element too.
-        if settings.fill_crack:
-            self.add_crack_filler(context, crackerObj, targetObj)
-
         bpy.data.objects[crackerName].modifiers.new("Cracker_Subd", type='SUBSURF')
         bpy.data.objects[crackerName].modifiers["Cracker_Subd"].subdivision_type = 'SIMPLE'
         bpy.data.objects[crackerName].modifiers["Cracker_Subd"].levels = settings.noise_resolution
@@ -177,11 +173,99 @@ class operator_crack(Operator):
         bpy.data.objects['cracker'].modifiers.new("Cracker_Solid", type='SOLIDIFY')
         bpy.data.objects['cracker'].modifiers["Cracker_Solid"].thickness = settings.thickness
         bpy.data.objects['cracker'].modifiers["Cracker_Solid"].offset = 0
-        
+
         bpy.data.objects[targetName].select_set(True)
         bpy.context.view_layer.objects.active = targetObj
 
         pass
+
+    
+
+    # EXPERIMENT - CONDENSED FUNCTION
+    def add_crack_filler(self, context, crack_obj, main_obj):
+        filler_obj = self.duplicate_and_modify_crack(context, crack_obj)
+        shrunken_obj = self.duplicate_and_shrink_original(context, main_obj)
+        out_obj = self.intersect_filler_and_shrunken(context, filler_obj, shrunken_obj, main_obj.name)
+        
+        # Link the filler object to the scene
+        #if out_obj.name not in context.collection.objects:
+        if out_obj.name not in context.collection.objects:
+            context.collection.objects.link(out_obj)
+            # TODO FIX: THIS SOUNDS LIKE A GREAT WAY TO MAKE BUGS
+
+
+    def clean_duplicate(self, context, target_obj):
+        # Store the original list of objects before duplication
+        original_objects = set(context.scene.objects)
+
+        # Ensure target_obj is the only selected object for accurate duplication
+        bpy.ops.object.select_all(action='DESELECT')
+        target_obj.select_set(True)
+        context.view_layer.objects.active = target_obj
+        
+        # Duplicate the object
+        new_object = target_obj.copy()
+        new_object.data = target_obj.data.copy()
+        bpy.context.scene.collection.objects.link(new_object)
+        new_object.location = target_obj.matrix_world.translation
+        return new_object
+    
+        
+    # EXPERIMENT 1/3 TODO COMMENT
+    def duplicate_and_modify_crack(self, context, crack_obj):
+        # Ensure crack_obj is the only selected object for accurate duplication
+        filler_obj = self.clean_duplicate(context, crack_obj)
+        filler_obj.name = "filler_obj__"
+        filler_obj.modifiers["Cracker_Solid"].thickness += 0.01
+
+        filler_obj.select_set(True)
+        context.view_layer.objects.active = filler_obj
+        bpy.ops.object.convert(target='MESH')
+
+        return filler_obj
+    
+    # EXPERIMENT 2/3 TODO COMMENT
+    def duplicate_and_shrink_original(self, context, original_obj):
+
+        shrunken_obj = self.clean_duplicate(context, original_obj)
+        shrunken_obj.name = "lazy_shrunken"
+
+        # Apply remesh and shrink
+        # TODO
+
+        return shrunken_obj
+
+    
+    # EXPERIMENT 3/3 TODO COMMENT
+    def intersect_filler_and_shrunken(self, context, filler_obj, shrunken_obj, original_name):
+
+       
+        # Ensure the filler object is selected and active
+        bpy.ops.object.select_all(action='DESELECT')
+        if not filler_obj:
+            return None  # One of the objects doesn't exist
+        
+        if not shrunken_obj:
+            return None  # One of the objects doesn't exist
+
+        filler_obj.select_set(True)
+        context.view_layer.objects.active = filler_obj
+
+        # Apply Boolean modifier to intersect with the shrunken object
+        bpy.ops.object.modifier_add(type='BOOLEAN')
+
+        boolean_modifier = filler_obj.modifiers[-1]
+        boolean_modifier.operation = 'INTERSECT'
+        boolean_modifier.solver = 'FAST'
+        boolean_modifier.object = shrunken_obj
+        bpy.ops.object.modifier_apply(modifier=boolean_modifier.name)
+
+        # Optionally, rename the filler object to indicate it's the final filler
+        final_filler_name = original_name + "_filler"
+        filler_obj.name = final_filler_name
+
+        return filler_obj
+
     
 
     def displace_cracker(self, context, dx, dy):
@@ -211,83 +295,15 @@ class operator_crack(Operator):
 
 
 
-    # EXPERIMENT - CONDENSED FUNCTION
-    def add_crack_filler(self, context, crack_obj, main_obj):
-        filler_obj = self.duplicate_and_modify_crack(context, crack_obj)
-        shrunken_obj = self.duplicate_and_shrink_original(context, main_obj)
-        filler_obj = self.intersect_filler_and_shrunken(context, filler_obj, shrunken_obj, main_obj.name)
-        
-        # Link the filler object to the scene
-        if filler_obj.name not in context.collection.objects:
-            context.collection.objects.link(filler_obj)
-            # TODO FIX: THIS SOUNDS LIKE A GREAT WAY TO MAKE BUGS
-        
-    # EXPERIMENT 1/3 
-    def duplicate_and_modify_crack(self, context, crack_obj):
-        # Ensure crack_obj is the only selected object for accurate duplication
-        bpy.ops.object.select_all(action='DESELECT')
-        crack_obj.select_set(True)
-        context.view_layer.objects.active = crack_obj
-
-        # Duplicate the crack object
-        bpy.ops.object.duplicate(linked=False)
-        # Immediately rename the active object (the duplicate)
-        filler_obj = context.view_layer.objects.active
-        filler_obj.name = "lazy_filler"
-
-        # Modify the thickness of the Solidify modifier
-        if "Solidify" in filler_obj.modifiers:
-            solidify_modifier = filler_obj.modifiers["Solidify"]
-            solidify_modifier.thickness += 0.05  # Adjust thickness as needed
-
-        return filler_obj
-
-    
-    # EXPERIMENT 2/3 
-    def duplicate_and_shrink_original(self, context, original_obj):
-        # Ensure original_obj is the only selected object for accurate duplication
-        bpy.ops.object.select_all(action='DESELECT')
-        original_obj.select_set(True)
-        context.view_layer.objects.active = original_obj
-
-        # Duplicate the original object
-        bpy.ops.object.duplicate(linked=False)
-        # Immediately rename the active object (the duplicate)
-        shrunken_obj = context.view_layer.objects.active
-        shrunken_obj.name = "lazy_shrunken"
-
-        # Apply modifications (remesh, displace, etc.) to shrunken_obj as needed
-
-        return shrunken_obj
-
-    
-    # EXPERIMENT 3/3 
-    def intersect_filler_and_shrunken(self, context, filler_obj, shrunken_obj, original_name):
-        # Ensure the filler object is selected and active
-        bpy.ops.object.select_all(action='DESELECT')
-        if not filler_obj or not shrunken_obj:
-            return None  # One of the objects doesn't exist
-
-        filler_obj.select_set(True)
-        context.view_layer.objects.active = filler_obj
-
-        # Apply Boolean modifier to intersect with the shrunken object
-        bpy.ops.object.modifier_add(type='BOOLEAN')
-        boolean_modifier = filler_obj.modifiers[-1]
-        boolean_modifier.operation = 'INTERSECT'
-        boolean_modifier.object = shrunken_obj
-        bpy.ops.object.modifier_apply(modifier=boolean_modifier.name)
-
-        # Optionally, rename the filler object to indicate it's the final filler
-        final_filler_name = original_name + "_filler"
-        filler_obj.name = final_filler_name
-
-        return filler_obj
-
-
     def apply_crack(self, context):
         original_active_object = context.view_layer.objects.active  # Store the original active object
         original_active_object_name = original_active_object.name  # Store the original active object's name for comparison
+
+        # If "fill crack" is set, creating here the other element too.
+        if context.scene.crack_settings.fill_crack:
+            cloned_cracker = bpy.data.objects.get('cracker')
+            cloned_cracker.name = "cloned_cracker"
+            self.add_crack_filler(context, cloned_cracker, original_active_object)
 
         # Apply the crack modifier
         for mod in original_active_object.modifiers:
