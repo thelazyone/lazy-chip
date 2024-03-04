@@ -12,7 +12,7 @@ from math import radians
 bl_info = {
     "name": "Smart Cracks",
     "author": "thelazyone",
-    "version": (1, 0, 1),
+    "version": (1, 0, 4),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Apply volumetric cracks with infill",
@@ -23,9 +23,12 @@ bl_info = {
 
 class crack_settings(bpy.types.PropertyGroup):
     fill_crack: bpy.props.BoolProperty(name="Fill Crack", default=False)
-    noise_scale: bpy.props.FloatProperty(name="Noise Scale", default=2.5, min=0.1, max=10.0)
-    thickness: bpy.props.FloatProperty(name="Thickness", default=0.005, min=0.001, max=0.1)
-    noise_intensity: bpy.props.FloatProperty(name="Noise Intensity", default=1.0, min=0.1, max=10.0)
+    center_geometry: bpy.props.BoolProperty(name="Center Origin", default=True)
+    noise_scale: bpy.props.FloatProperty(name="Noise Scale", default=1.5, min=0.1, max=10.0)
+    noise_depth: bpy.props.IntProperty(name="Noise Depth", default=3, min=0, max=10)
+    noise_resolution: bpy.props.IntProperty(name="Noise Resolution", default=6, min=3, max=7)
+    thickness: bpy.props.FloatProperty(name="Thickness", default=0.02, min=0.001, max=0.1)
+    noise_intensity: bpy.props.FloatProperty(name="Noise Intensity", default=1.6, min=0.1, max=10.0)
 
 
 class operator_crack(Operator):
@@ -75,20 +78,39 @@ class operator_crack(Operator):
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
     
+    def center_geometry_origin(self, context):
+        obj = context.active_object
+        # Calculate the center of the bounding box
+        local_bbox_center = 0.125 * sum((Vector(b) for b in obj.bound_box), Vector())
+        global_bbox_center = obj.matrix_world @ local_bbox_center
+
+        # Move the object so that the bounding box center goes to the origin
+        obj.location = global_bbox_center
+
+        # Set the origin to the geometry's bounding box center
+        bpy.ops.object.origin_set(type='ORIGIN_CENTER_OF_MASS')  # OR 'ORIGIN_CENTER_OF_VOLUME'
+
+        # Adjust the object's location to compensate for the origin shift
+        obj.location -= global_bbox_center - obj.location
+    
     def create_cracker(self, context):
+        
+        # Copying the settings
+        settings = context.scene.crack_settings
+
+        # If requested, centering the geometry here
+        if settings.center_geometry:
+            bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY')
+
         # Ensure the texture exists before using it
         if "cracker_texture" not in bpy.data.textures:
             cracker_texture = bpy.data.textures.new(name="cracker_texture", type='CLOUDS')
             cracker_texture.noise_basis = 'BLENDER_ORIGINAL'
-            cracker_texture.noise_scale = 2.5
         else:
             cracker_texture = bpy.data.textures["cracker_texture"]
-
-        # Reading the settings from the panel
-        settings = context.scene.crack_settings
         cracker_texture.noise_scale = settings.noise_scale
+        cracker_texture.noise_depth = settings.noise_depth
 
-            
         # Store target obj
         targetName = bpy.context.object.name
         targetObj = bpy.data.objects[targetName]
@@ -129,9 +151,13 @@ class operator_crack(Operator):
         crackerObj.parent = crackerEmpty
         crackerObj.matrix_parent_inverse = crackerEmpty.matrix_world.inverted()
 
+        # If "fill crack" is set, creating here the other element too.
+        if settings.fill_crack:
+            self.add_crack_filler(context, crackerObj, targetObj)
+
         bpy.data.objects[crackerName].modifiers.new("Cracker_Subd", type='SUBSURF')
         bpy.data.objects[crackerName].modifiers["Cracker_Subd"].subdivision_type = 'SIMPLE'
-        bpy.data.objects[crackerName].modifiers["Cracker_Subd"].levels = 5
+        bpy.data.objects[crackerName].modifiers["Cracker_Subd"].levels = settings.noise_resolution
 
         bpy.data.objects[targetName].modifiers.new("cracker", type='BOOLEAN')
         bpy.data.objects[targetName].modifiers["cracker"].solver = 'FAST'
@@ -151,7 +177,7 @@ class operator_crack(Operator):
         bpy.data.objects['cracker'].modifiers.new("Cracker_Solid", type='SOLIDIFY')
         bpy.data.objects['cracker'].modifiers["Cracker_Solid"].thickness = settings.thickness
         bpy.data.objects['cracker'].modifiers["Cracker_Solid"].offset = 0
-
+        
         bpy.data.objects[targetName].select_set(True)
         bpy.context.view_layer.objects.active = targetObj
 
@@ -179,10 +205,84 @@ class operator_crack(Operator):
                 cracker_empty.location += displacement_vector
 
 
-
     def rotate_cracker(self, context, wheel_direction):
         rotation_amount = radians(5) if wheel_direction == 'WHEELUPMOUSE' else radians(-5)
         bpy.data.objects["cracker_empty"].rotation_euler[2] += rotation_amount
+
+
+
+    # EXPERIMENT - CONDENSED FUNCTION
+    def add_crack_filler(self, context, crack_obj, main_obj):
+        filler_obj = self.duplicate_and_modify_crack(context, crack_obj)
+        shrunken_obj = self.duplicate_and_shrink_original(context, main_obj)
+        filler_obj = self.intersect_filler_and_shrunken(context, filler_obj, shrunken_obj, main_obj.name)
+        
+        # Link the filler object to the scene
+        if filler_obj.name not in context.collection.objects:
+            context.collection.objects.link(filler_obj)
+            # TODO FIX: THIS SOUNDS LIKE A GREAT WAY TO MAKE BUGS
+        
+    # EXPERIMENT 1/3 
+    def duplicate_and_modify_crack(self, context, crack_obj):
+        # Ensure crack_obj is the only selected object for accurate duplication
+        bpy.ops.object.select_all(action='DESELECT')
+        crack_obj.select_set(True)
+        context.view_layer.objects.active = crack_obj
+
+        # Duplicate the crack object
+        bpy.ops.object.duplicate(linked=False)
+        # Immediately rename the active object (the duplicate)
+        filler_obj = context.view_layer.objects.active
+        filler_obj.name = "lazy_filler"
+
+        # Modify the thickness of the Solidify modifier
+        if "Solidify" in filler_obj.modifiers:
+            solidify_modifier = filler_obj.modifiers["Solidify"]
+            solidify_modifier.thickness += 0.05  # Adjust thickness as needed
+
+        return filler_obj
+
+    
+    # EXPERIMENT 2/3 
+    def duplicate_and_shrink_original(self, context, original_obj):
+        # Ensure original_obj is the only selected object for accurate duplication
+        bpy.ops.object.select_all(action='DESELECT')
+        original_obj.select_set(True)
+        context.view_layer.objects.active = original_obj
+
+        # Duplicate the original object
+        bpy.ops.object.duplicate(linked=False)
+        # Immediately rename the active object (the duplicate)
+        shrunken_obj = context.view_layer.objects.active
+        shrunken_obj.name = "lazy_shrunken"
+
+        # Apply modifications (remesh, displace, etc.) to shrunken_obj as needed
+
+        return shrunken_obj
+
+    
+    # EXPERIMENT 3/3 
+    def intersect_filler_and_shrunken(self, context, filler_obj, shrunken_obj, original_name):
+        # Ensure the filler object is selected and active
+        bpy.ops.object.select_all(action='DESELECT')
+        if not filler_obj or not shrunken_obj:
+            return None  # One of the objects doesn't exist
+
+        filler_obj.select_set(True)
+        context.view_layer.objects.active = filler_obj
+
+        # Apply Boolean modifier to intersect with the shrunken object
+        bpy.ops.object.modifier_add(type='BOOLEAN')
+        boolean_modifier = filler_obj.modifiers[-1]
+        boolean_modifier.operation = 'INTERSECT'
+        boolean_modifier.object = shrunken_obj
+        bpy.ops.object.modifier_apply(modifier=boolean_modifier.name)
+
+        # Optionally, rename the filler object to indicate it's the final filler
+        final_filler_name = original_name + "_filler"
+        filler_obj.name = final_filler_name
+
+        return filler_obj
 
 
     def apply_crack(self, context):
@@ -223,12 +323,15 @@ class operator_crack(Operator):
                 context.view_layer.objects.active = obj  # Make the object active
                 bpy.ops.object.shade_flat()  # Set shading to flat
 
+        
+
         # Cleanup: Deselect all and reselect the original object
         bpy.ops.object.select_all(action='DESELECT')
         original_active_object.select_set(True)
         context.view_layer.objects.active = original_active_object
 
         return {'FINISHED'}  # or return {'CANCELLED'} as needed
+
 
 
 class panel_crack(Panel):
@@ -247,8 +350,12 @@ class panel_crack(Panel):
         layout = self.layout
         settings = context.scene.crack_settings
 
+        # Settings
         layout.prop(settings, "fill_crack")
+        layout.prop(settings, "center_geometry")
         layout.prop(settings, "noise_scale")
+        layout.prop(settings, "noise_depth")
+        layout.prop(settings, "noise_resolution")
         layout.prop(settings, "thickness")
         layout.prop(settings, "noise_intensity")
 
