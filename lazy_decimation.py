@@ -9,7 +9,7 @@ from mathutils import Vector
 bl_info = {
     "name": "Smart Decimation",
     "author": "thelazyone",
-    "version": (1, 0, 3),
+    "version": (1, 0, 4),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Decimate meshes with extra checks.",
@@ -18,6 +18,8 @@ bl_info = {
     "category": "Mesh",
 }
 
+
+# To solve overlapping edges and faces, applying a relaxation logic.
 def relax_intersecting_faces(obj, iterations=3, relaxation_strength=0.5):
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
@@ -52,6 +54,8 @@ def relax_intersecting_faces(obj, iterations=3, relaxation_strength=0.5):
     bmesh.update_edit_mesh(obj.data)
     bpy.ops.object.mode_set(mode='OBJECT')
 
+
+# Fixing the overlapping edges
 def fix_intersections_and_recalculate_normals(obj):
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
@@ -65,6 +69,8 @@ def fix_intersections_and_recalculate_normals(obj):
     
     bpy.ops.object.mode_set(mode='OBJECT')
 
+
+# Checks if something is non-manifold.
 def check_non_manifold(mesh):
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -72,6 +78,8 @@ def check_non_manifold(mesh):
     bpy.ops.object.mode_set(mode='OBJECT')
     return any(v.select for v in mesh.vertices)
 
+
+# A basic non-manifold fix. Not resolutive.
 def fix_non_manifold(mesh):
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='DESELECT')
@@ -80,6 +88,9 @@ def fix_non_manifold(mesh):
     bpy.ops.mesh.intersect(mode='SELECT', separate_mode='CUT')
     bpy.ops.object.mode_set(mode='OBJECT')
 
+
+# Checks any part of the decimated object that is not connected to the main body 
+# and smaller than a certain threhsold
 def delete_small_islands(obj, threshold=100):
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
@@ -97,25 +108,59 @@ def delete_small_islands(obj, threshold=100):
     # Collect objects to delete based on face count threshold
     objects_to_delete = [o for o in bpy.context.selected_objects if len(o.data.polygons) < threshold]
 
-    # Delete objects
-    for obj_to_delete in objects_to_delete:
-        bpy.data.objects.remove(obj_to_delete, do_unlink=True)
+    # Check: if the objects to be deleted are all of them, ending this now.
+    if len(objects_to_delete) < len(bpy.context.selected_objects): 
 
-    # Re-select the remaining objects for joining
-    for obj in bpy.context.view_layer.objects:
-        if obj.name.startswith(original_name):
-            obj.select_set(True)
-        else:
-            obj.select_set(False)
+        # Delete objects
+        for obj_to_delete in objects_to_delete:
+            bpy.data.objects.remove(obj_to_delete, do_unlink=True)
 
-    # Make sure there's more than one object selected for join operation
-    if len(bpy.context.selected_objects) > 1:
-        bpy.ops.object.join()  # Join the remaining objects
+        # Re-select the remaining objects for joining
+        for obj in bpy.context.view_layer.objects:
+            if obj.name.startswith(original_name):
+                obj.select_set(True)
+            else:
+                obj.select_set(False)
 
-    # Optionally, rename the joined object to the original name
+        # Make sure there's more than one object selected for join operation
+        if len(bpy.context.selected_objects) > 1:
+            bpy.ops.object.join()  # Join the remaining objects
+
+    # Rename the joined object to the original name
     bpy.context.view_layer.objects.active.name = original_name
 
 
+# Fixes to be applied to the decimated mesh (or without decimating)
+def fix_mesh(obj, settings):
+    mesh = obj.data
+    
+    # Save current selection mode
+    bpy.context.view_layer.objects.active = obj
+    original_select_mode = bpy.context.tool_settings.mesh_select_mode[:]
+    
+    # Ensure we're in object mode for certain operations
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Switch to vertex select mode for operations
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.context.tool_settings.mesh_select_mode = (True, False, False)
+    
+    # Fix non-manifold geometry if necessary
+    if settings.fix_non_manifold:
+        fix_non_manifold(mesh)
+    
+    # Fix intersecting faces and recalculate normals if enabled
+    if settings.fix_intersections:
+        fix_intersections_and_recalculate_normals(obj)
+        relax_intersecting_faces(obj)
+        delete_small_islands(obj)
+
+    # Restore original selection mode and switch back to object mode
+    bpy.context.tool_settings.mesh_select_mode = original_select_mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+# Plugin settings
 class DecimateAndFixSettings(bpy.types.PropertyGroup):
     decimate_ratio: FloatProperty(
         name="Decimate Ratio",
@@ -136,6 +181,7 @@ class DecimateAndFixSettings(bpy.types.PropertyGroup):
     )
 
 
+# Decimating the mesh, then calling (conditionally) the fix_mesh function.
 class MESH_OT_decimate_and_fix(Operator):
     bl_idname = "mesh.decimate_and_fix"
     bl_label = "Smart Decimation"
@@ -177,14 +223,7 @@ class MESH_OT_decimate_and_fix(Operator):
             context.tool_settings.mesh_select_mode = (True, False, False)
             
             # Fix non-manifold geometry if necessary
-            if settings.fix_non_manifold:
-                fix_non_manifold(mesh)
-            
-            # Fix intersecting faces and recalculate normals if enabled
-            if settings.fix_intersections:
-                fix_intersections_and_recalculate_normals(obj)
-                relax_intersecting_faces(obj)
-                delete_small_islands(obj)
+            fix_mesh(obj, settings)
 
             # Restore original selection mode
             context.tool_settings.mesh_select_mode = original_select_mode
@@ -192,6 +231,40 @@ class MESH_OT_decimate_and_fix(Operator):
 
         self.report({'INFO'}, "Finished processing all objects")
         return {'FINISHED'}
+
+
+# Preset Ratio operator. Simply set a default value to the decimation ratio parameter.
+class MESH_OT_set_decimate_ratio(Operator):
+    """Set a preset decimate ratio"""
+    bl_idname = "mesh.set_decimate_ratio"
+    bl_label = "Set Decimate Ratio"
+    ratio: FloatProperty()
+
+    def execute(self, context):
+        context.scene.decimate_and_fix_settings.decimate_ratio = self.ratio
+        return {'FINISHED'}
+    
+    
+# Just Fix Operator
+class MESH_OT_just_fix(Operator):
+    bl_idname = "mesh.just_fix"
+    bl_label = "Just Fix"
+    bl_description = "Fix mesh issues without decimation"
+
+    @classmethod
+    def poll(cls, context):
+        return context.active_object is not None and context.active_object.type == 'MESH'
+        
+    def execute(self, context):
+        settings = context.scene.decimate_and_fix_settings
+        objects = context.selected_objects
+        for obj in objects:
+            if obj.type == 'MESH':
+                fix_mesh(obj, settings)
+                pass
+
+        return {'FINISHED'}
+    
 
 class MESH_PT_decimate_and_fix(Panel):
     bl_idname = "LazyDecimation"
@@ -208,23 +281,40 @@ class MESH_PT_decimate_and_fix(Panel):
     def draw(self, context):
         layout = self.layout
         settings = context.scene.decimate_and_fix_settings
+
+        # Decimation ratio
         layout.prop(settings, "decimate_ratio")
+
+        # Preset buttons in a single row
+        row = layout.row()
+        row.operator("mesh.set_decimate_ratio", text="0.25").ratio = 0.25
+        row.operator("mesh.set_decimate_ratio", text="0.1").ratio = 0.1
+        row.operator("mesh.set_decimate_ratio", text="0.025").ratio = 0.025
+
+        # Options for the Decimation
         layout.prop(settings, "fix_non_manifold")
-        layout.prop(settings, "remove_doubles")
-        layout.prop(settings, "fill_holes")
         layout.prop(settings, "fix_intersections")
-        layout.prop(settings, "recalculate_normals")
+
+        # Decimate button
         layout.operator(MESH_OT_decimate_and_fix.bl_idname)
+        
+        # Just Fix button
+        layout.operator("mesh.just_fix", text="Just Fix")
+
 
 def register():
     bpy.utils.register_class(MESH_OT_decimate_and_fix)
     bpy.utils.register_class(MESH_PT_decimate_and_fix)
+    bpy.utils.register_class(MESH_OT_set_decimate_ratio)
+    bpy.utils.register_class(MESH_OT_just_fix)
     bpy.utils.register_class(DecimateAndFixSettings)
     bpy.types.Scene.decimate_and_fix_settings = bpy.props.PointerProperty(type=DecimateAndFixSettings)
 
 def unregister():
     bpy.utils.unregister_class(MESH_OT_decimate_and_fix)
     bpy.utils.unregister_class(MESH_PT_decimate_and_fix)
+    bpy.utils.unregister_class(MESH_OT_set_decimate_ratio)
+    bpy.utils.unregister_class(MESH_OT_just_fix)
     bpy.utils.unregister_class(DecimateAndFixSettings)
     del bpy.types.Scene.decimate_and_fix_settings
 
