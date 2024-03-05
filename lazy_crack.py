@@ -9,6 +9,11 @@ from mathutils import Vector
 import random
 from math import radians
 
+
+# BIG TODO s:
+# * wheel rotation should be relative to the viewer's plane, not z! 
+# * scale of crack detail should be absolute not relative to the object
+
 bl_info = {
     "name": "Smart Cracks",
     "author": "thelazyone",
@@ -291,8 +296,7 @@ class operator_crack(Operator):
 
     def rotate_cracker(self, context, wheel_direction):
         rotation_amount = radians(5) if wheel_direction == 'WHEELUPMOUSE' else radians(-5)
-        bpy.data.objects["cracker_empty"].rotation_euler[2] += rotation_amount
-
+        bpy.data.objects['cracker'].rotation_euler.rotate_axis('Y', rotation_amount)
 
 
     def apply_crack(self, context):
