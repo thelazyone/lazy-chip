@@ -2,23 +2,7 @@ import bpy
 from bpy.types import Operator
 
 
-class LAZYCHIP_OP_woodsmoothing(Operator):
-    bl_label = "Set Wood Smoothing"
-    bl_idname = "lazychip.op_woodsmoothing"
-    def execute(self, context):
-        weathering_props = context.scene.weathering_props
-        weathering_props.resolution_property = 64
-        weathering_props.edge_relax_property = 1.5
-        weathering_props.edge_push_property = 0.9
-        weathering_props.noise_scale_property = 60
-        weathering_props.noise_strength_property = 8.0
-        weathering_props.noise_contrast_property = 0.5
-        weathering_props.seed_property = 0
-        weathering_props.random_seed_property = True
-        weathering_props.fixed_scale_check_property = True
-        weathering_props.fixed_scale_property = 4.0
-        return {'FINISHED'}
-    
+
 class LAZYCHIP_OP_woodchipping(Operator):
     bl_label = "Set Wood Chipping"
     bl_idname = "lazychip.op_woodchipping"
@@ -34,6 +18,23 @@ class LAZYCHIP_OP_woodchipping(Operator):
         weathering_props.random_seed_property = True
         weathering_props.fixed_scale_check_property = True
         weathering_props.fixed_scale_property = 4.0
+        return {'FINISHED'}
+    
+class LAZYCHIP_OP_woodsmoothing(Operator):
+    bl_label = "Set Wood Smoothing"
+    bl_idname = "lazychip.op_woodsmoothing"
+    def execute(self, context):
+        weathering_props = context.scene.weathering_props
+        weathering_props.resolution_property = 64
+        weathering_props.edge_relax_property = 1.5
+        weathering_props.edge_push_property = 0.9
+        weathering_props.noise_scale_property = 60
+        weathering_props.noise_strength_property = 8.0
+        weathering_props.noise_contrast_property = 0.5
+        weathering_props.seed_property = 0
+        weathering_props.random_seed_property = True
+        weathering_props.fixed_scale_check_property = True
+        weathering_props.fixed_scale_property = 2.0
         return {'FINISHED'}
     
 class LAZYCHIP_OP_stonemarbling(Operator):

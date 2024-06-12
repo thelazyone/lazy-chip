@@ -160,7 +160,6 @@ def fix_mesh(obj, settings):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
-# Plugin settings
 class DecimateAndFixSettings(bpy.types.PropertyGroup):
     decimate_ratio: FloatProperty(
         name="Decimate Ratio",
@@ -179,6 +178,18 @@ class DecimateAndFixSettings(bpy.types.PropertyGroup):
         description="Automatically fix intersecting faces",
         default=True,
     )
+    remesh_before_decimation: BoolProperty(
+        name="Remesh Before Decimation",
+        description="Apply remeshing before decimation",
+        default=False,
+    )
+    remesh_value: FloatProperty(
+        name="Remesh Value",
+        description="The value for remeshing",
+        min=0.01,
+        max=10.0,
+        default=1.0,
+    )
 
 
 # Decimating the mesh, then calling (conditionally) the fix_mesh function.
@@ -195,6 +206,8 @@ class MESH_OT_decimate_and_fix(Operator):
         return self.execute(context)
 
     def execute(self, context):
+
+        original_selection = context.selected_objects.copy()
         objects = context.selected_objects
         total_objects = len(objects)
         settings = context.scene.decimate_and_fix_settings
@@ -204,7 +217,10 @@ class MESH_OT_decimate_and_fix(Operator):
                 continue
 
             self.report({'INFO'}, f"Processing object {index}/{total_objects}: {obj.name}")
-            mesh = obj.data
+
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
             
             # Save current selection mode
             original_select_mode = context.tool_settings.mesh_select_mode[:]
@@ -212,22 +228,38 @@ class MESH_OT_decimate_and_fix(Operator):
             # Ensure we're in object mode to apply modifiers
             bpy.ops.object.mode_set(mode='OBJECT')
 
-            # Add and apply Decimate modifier
-            modifier = obj.modifiers.new(name="Decimate", type='DECIMATE')
-            modifier.ratio = settings.decimate_ratio
-            bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.modifier_apply(modifier="Decimate")
+            if settings.remesh_before_decimation:
+
+                # Apply scale before any operations
+                bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
+                # Assuming 'remesh_value' would be used with a remesh modifier logic here
+                bpy.context.object.data.remesh_voxel_size = settings.remesh_value
+                bpy.ops.object.voxel_remesh()
 
             # Switch to vertex select mode for operations
             bpy.ops.object.mode_set(mode='EDIT')
             context.tool_settings.mesh_select_mode = (True, False, False)
+
+            # Add and apply Decimate modifier
+            bpy.ops.mesh.select_all(action='SELECT')  # Select all geometry
+            bpy.ops.mesh.decimate(ratio=settings.decimate_ratio)
             
             # Fix non-manifold geometry if necessary
             fix_mesh(obj, settings)
 
             # Restore original selection mode
             context.tool_settings.mesh_select_mode = original_select_mode
-            bpy.ops.object.mode_set(mode='OBJECT')            
+            bpy.ops.object.mode_set(mode='OBJECT')     
+        
+        # Restore the original selection
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in original_selection:
+            obj.select_set(True)
+        
+        # Set the first of the originally selected objects as active again
+        if original_selection:
+            bpy.context.view_layer.objects.active = original_selection[0]
 
         self.report({'INFO'}, "Finished processing all objects")
         return {'FINISHED'}
@@ -282,8 +314,13 @@ class MESH_PT_decimate_and_fix(Panel):
         layout = self.layout
         settings = context.scene.decimate_and_fix_settings
 
-        # Decimation ratio
+
+        # Decimation ratio and remesh settings
         layout.prop(settings, "decimate_ratio")
+        layout.prop(settings, "remesh_before_decimation")
+
+        if settings.remesh_before_decimation:
+            layout.prop(settings, "remesh_value")
 
         # Preset buttons in a single row
         row = layout.row()
