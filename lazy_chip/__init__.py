@@ -1,8 +1,8 @@
 import bpy
+from . import mesh_operators
 from . import ui
 from . import preset_operators
 from . import damage
-from . import mesh_operators
 
 
 bl_info = {
