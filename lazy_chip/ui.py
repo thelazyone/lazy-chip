@@ -14,6 +14,8 @@ class WeatheringProps(PropertyGroup):
     fixed_scale_check_property: bpy.props.BoolProperty(name="Use Fixed Scale", default=False)
     fixed_scale_property: FloatProperty(name="Noise Scale", default=1, min=0, max=20)
     attempts_property: IntProperty(name="Attempts", default=5, min=1, max=100, description="Number of times the script attempts to apply its logic before giving up")
+    fix_between_steps_property: bpy.props.BoolProperty(name="Fix Between Steps", default=True)
+
 
 class WeatheringPanel(Panel):
     bl_label = "Lazy Chip"
@@ -55,6 +57,10 @@ class WeatheringPanel(Panel):
         curr_column = layout.column()
         curr_column.label(text="Selected objects: " + str(
             [curr_object.name for curr_object in context.selected_objects if curr_object.type == 'MESH']))
+        
+        curr_column.separator()
+        curr_column.prop(scene_pointer, "fix_between_steps_property")
+
         curr_column = layout.column(align=True)
         curr_column.scale_y = 1.5
 

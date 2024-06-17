@@ -4,36 +4,9 @@ import mathutils
 import random
 from bpy.types import Operator
 
-# Utility functions
-def is_watertight_mesh(object):
-    """
-    Checks whether the given object is watertight or not.
-    """
-    old_active_object = bpy.context.view_layer.objects.active
-    old_mode = old_active_object.mode
+# For profiling only:
+import time
 
-    bpy.context.view_layer.objects.active = object
-    bpy.ops.object.mode_set(mode='EDIT')
-
-    # Store the previous selection mode and switch to vertex selection mode
-    previous_select_mode = tuple(bpy.context.tool_settings.mesh_select_mode)
-    bpy.context.tool_settings.mesh_select_mode = (True, False, False)
-
-    bpy.ops.mesh.select_non_manifold(extend=False)
-    bm = bmesh.from_edit_mesh(object.data)
-
-    is_watertight = True
-    for v in bm.verts:
-        if v.select:
-            is_watertight = False
-            break
-
-    # Restore the previous selection mode and object mode
-    bpy.context.tool_settings.mesh_select_mode = previous_select_mode
-    bpy.context.view_layer.objects.active = old_active_object
-    bpy.ops.object.mode_set(mode=old_mode)
-
-    return is_watertight
 
 def clone_object(context, i_selected_object):
     """
@@ -44,6 +17,7 @@ def clone_object(context, i_selected_object):
     object_copy.animation_data_clear()
     context.collection.objects.link(object_copy)
     return object_copy
+
 
 class LAZYCHIP_OP_removedamage(Operator):
     bl_label = "Remove Damage"
@@ -87,10 +61,6 @@ class LAZYCHIP_OP_clearstash(Operator):
             selected_name_split = selected_name.split('_chipped', 1)[0]
             if bpy.data.meshes.find(selected_name_split) != -1:
                 i_selected_object.data.name = selected_name_split + "_applied" 
-                # i_selected_object.data = bpy.data.meshes[selected_name_split]
-                # bpy.data.meshes.remove(
-                    # bpy.data.meshes[selected_name], do_unlink=True)
-                # object_copy.data.name
             elif bpy.data.meshes.find(selected_name_split.rsplit('.', 1)[0]) != -1:
                 i_selected_object.data = bpy.data.meshes[selected_name_split.rsplit('.', 1)[
                     0]]
@@ -143,14 +113,6 @@ class LAZYCHIP_OP_applydamage(Operator):
                 is_watertight = False
                 break
 
-        # # Only check for self intersection if manifold
-        # if is_watertight and check_self_intersection:
-            # bvh_tree = mathutils.bvhtree.BVHTree.FromBMesh(bm, epsilon=0.000001)
-            # intersections = bvh_tree.overlap(bvh_tree)
-
-            # if intersections:
-                # is_watertight = False
-                
         bpy.context.view_layer.objects.active = old_active_object
         bpy.ops.object.mode_set(mode=old_mode)
 
@@ -161,6 +123,45 @@ class LAZYCHIP_OP_applydamage(Operator):
         bpy.ops.object.mode_set(mode=old_mode)
 
         return is_watertight
+    
+    
+
+    def make_non_manifold(self, object: bpy.types.Object, ):
+        # Ensure the 3D Printing Toolbox is enabled
+        addon_key = 'mesh_3d_print_toolbox'
+        if addon_key not in bpy.context.preferences.addons:
+            bpy.ops.preferences.addon_enable(module=addon_key)
+        
+        # Save the current mode so we can return to it later
+        original_mode = object.mode
+        
+        # Ensure object is in edit mode for the operation
+        if object.mode != 'EDIT':
+            bpy.ops.object.mode_set(mode='EDIT')
+        
+        try:
+            # Perform the make non-manifold operation
+            bpy.ops.mesh.print3d_clean_non_manifold()
+        except AttributeError:
+            print("3D Printing Toolbox addon not installed!")
+            return {'CANCELLED'}
+        finally:
+            # Return to the original mode
+            if original_mode != 'EDIT':
+                bpy.ops.object.mode_set(mode=original_mode)
+        
+        return {'FINISHED'}
+
+
+    def make_non_manifold_iterate(self, object: bpy.types.Object, max_iterations):
+        self.report({'INFO'}, "Called make non manifold.")
+        for i in range(max_iterations):
+            if not self.is_watertight_mesh(object):
+                self.report({'INFO'}, "Mesh was non-manifold, fixing it (attempt" + str(i+1) + " of " + str(max_iterations) +").")
+                self.make_non_manifold(object)
+            else:
+                self.report({'INFO'}, "all is good!.")
+                break
         
 
     def remove_damage(self, context, i_selected_object):
@@ -180,8 +181,15 @@ class LAZYCHIP_OP_applydamage(Operator):
                 pass
                 
     def apply_damage(self, context, i_selected_object):    
+
+        # TODO profiling only.
+        start_t = time.time()
+
         context.view_layer.objects.active = i_selected_object
         bpy.ops.object.convert(target='MESH')
+
+        self.report({'INFO'}, "SUB_T1: " + str(time.time() - start_t))
+        
         scene = context.scene
         curr_resolution_property = scene.weathering_props.resolution_property
         curr_dimensions = i_selected_object.dimensions
@@ -195,6 +203,9 @@ class LAZYCHIP_OP_applydamage(Operator):
         new_remesh_modifier.voxel_size = rescaled_ratio
         new_remesh_modifier.use_smooth_shade = False
         edge_relax_value = scene.weathering_props.edge_relax_property
+
+        self.report({'INFO'}, "SUB_T2: " + str(time.time() - start_t))
+
         new_smooth_property = i_selected_object.modifiers.new("Smooth", 'SMOOTH')
         new_smooth_property.iterations = int(curr_resolution_property*edge_relax_value)
         edge_push_value = scene.weathering_props.edge_push_property
@@ -207,6 +218,9 @@ class LAZYCHIP_OP_applydamage(Operator):
         new_displace_modifier.texture_coords = 'GLOBAL'
         random.seed(
             scene.weathering_props.seed_property)
+        
+        self.report({'INFO'}, "SUB_T3: " + str(time.time() - start_t))
+
         random1 = random.uniform(-99.9, 99.9)
         random2 = random.uniform(-99.9, 99.9)
         random3 = random.uniform(-99.9, 99.9)
@@ -214,6 +228,9 @@ class LAZYCHIP_OP_applydamage(Operator):
         i_selected_object.location.y += random2
         i_selected_object.location.z += random3
         static_noise_depth = 4
+
+        self.report({'INFO'}, "SUB_T4: " + str(time.time() - start_t))
+
         rescaled_noise_scale = scene.weathering_props.noise_scale_property / \
             200 * all_dimensions_ratio
         contrast_property = scene.weathering_props.noise_contrast_property
@@ -223,11 +240,19 @@ class LAZYCHIP_OP_applydamage(Operator):
         noise_modifier.noise_depth = static_noise_depth
         noise_modifier.contrast = contrast_property
         new_displace_modifier.texture = noise_modifier
+
+        self.report({'INFO'}, "SUB_T5: " + str(time.time() - start_t))
+
         bpy.ops.object.convert(target='MESH')
+
+        self.report({'INFO'}, "SUB_T6: " + str(time.time() - start_t))
+
         bpy.data.textures.remove(noise_modifier)
         i_selected_object.location.x -= random1
         i_selected_object.location.y -= random2
         i_selected_object.location.z -= random3
+
+        self.report({'INFO'}, "SUB_T7: " + str(time.time() - start_t))
         
 
     def clone_object(self, context, i_selected_object):
@@ -270,13 +295,31 @@ class LAZYCHIP_OP_applydamage(Operator):
             if hasattr(object_copy.data, "transform"):
                 object_copy.data.transform(copied_matrix_basis)
                 
+            # TODO profiling only.
+            self.report({'INFO'}, "Starting the apply damage performance.")
+            start_t = time.time()
+
             # Applying the damage (and the bool modifier)
             self.apply_damage(context, object_copy)
+
+            self.report({'INFO'}, "T1: " + str(time.time() - start_t))
+
             copied_matrix_basis.invert()
+
+            self.report({'INFO'}, "T2: " + str(time.time() - start_t))
+
             if hasattr(object_copy.data, "transform"):
                 object_copy.data.transform(copied_matrix_basis)
-            self.apply_boolean(
-                context, object_copy, current_mesh)
+            
+            self.report({'INFO'}, "T3: " + str(time.time() - start_t))
+
+            # TODO maybe to be removed: applying non-manifold before pass
+            if scene.weathering_props.fix_between_steps_property:
+                self.make_non_manifold(current_mesh)
+
+            self.apply_boolean(context, object_copy, current_mesh)
+                
+            self.report({'INFO'}, "T3: " + str(time.time() - start_t))
                 
             # Tricking into creating this fake object
             current_mesh.data.use_fake_user = True
@@ -292,12 +335,20 @@ class LAZYCHIP_OP_applydamage(Operator):
         context.view_layer.objects.active = active_object
         
     def execute(self, context):
-        self.report({'INFO'}, "Calling Execute. Applying damage...")
+        self.report({'INFO'}, "Calling Execute. Applying damages...")
+        self.report({'INFO'}, "AAA")
         scene = context.scene
         bpy.ops.object.mode_set(mode='OBJECT')
         all_meshes = [
             curr_object for curr_object in context.selected_objects if curr_object.type == 'MESH']
         self.apply_damage_one_pass(context, scene, all_meshes)
+
+        # TODO maybe to be removed: applying non-manifold before pass
+        if scene.weathering_props.fix_between_steps_property:
+            for curr_object in all_meshes:
+                self.make_non_manifold_iterate(curr_object, 5)
+
+
     
         # Checking for non watertight
         all_meshes = [
