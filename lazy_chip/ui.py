@@ -54,6 +54,7 @@ class WeatheringPanel(Panel):
         curr_column.label(text="Concrete:")
         curr_column.operator("lazychip.op_concretechippingsurface")
         curr_column.operator("lazychip.op_concretechippingedges")
+        curr_column.operator("lazychip.op_concreteheavyweathering")
         curr_column = layout.column()
         curr_column.label(text="Selected objects: " + str(
             [curr_object.name for curr_object in context.selected_objects if curr_object.type == 'MESH']))
