@@ -23,17 +23,17 @@ class ExtendedMaterialSettings(bpy.types.PropertyGroup):
     palette_rows: bpy.props.IntProperty(
         name="Rows",
         description="Number of rows in the color palette",
-        default=1, min=1, max=4
+        default=6, min=1, max=6
     )
     palette_columns: bpy.props.IntProperty(
         name="Columns",
         description="Number of columns in the color palette",
-        default=1, min=1, max=4
+        default=6, min=1, max=6
     )
     color_index: bpy.props.IntProperty(
         name="Color Index",
         description="Index of the color to apply",
-        default=1, min=1, max=16
+        default=1, min=1, max=36
     )
 
 class MATERIAL_OT_delete_materials(Operator):
@@ -198,44 +198,73 @@ def random_color():
     value = 1.0  # Fixed value
     return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
 
+
 def initialize_all_faces_random(context):
     obj = context.object
     mesh = obj.data
     settings = context.scene.extended_material_settings
     num_colors = settings.palette_columns * settings.palette_rows
 
-    for poly in mesh.polygons:
-        random_color_index = random.randint(0, num_colors - 1)
-        assign_faces_to_color(context, [poly.index], random_color_index)
+    if num_colors == 0:
+        return  # Avoid division by zero if no colors are defined
 
+    # Store the current mode, and switch to Edit Mode to ensure full access to the mesh
+    current_mode = bpy.context.object.mode
+    bpy.ops.object.mode_set(mode='EDIT')
+
+    # Collect indices of all faces
+    all_faces = [p.index for p in mesh.polygons]
+    random.shuffle(all_faces)  # Shuffle to randomize distribution
+
+    # Split into groups for each color
+    face_groups = {i: [] for i in range(num_colors)}
+    for i, face_index in enumerate(all_faces):
+        color_group_index = i % num_colors
+        face_groups[color_group_index].append(face_index)
+
+    # Assign each group of faces to a corresponding color
+    for color_index, faces in face_groups.items():
+        assign_faces_to_color(context, faces, color_index)
+
+    # Restore the original mode
+    bpy.ops.object.mode_set(mode=current_mode)
+    
 
 def assign_faces_to_color(context, faces, color_index):
     obj = context.object
     mesh = obj.data
-    # Access the specific UV map by name instead of using the active one
+
+    # Store the current mode and switch to object mode to manipulate UVs safely
+    current_mode = bpy.context.object.mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    if "uv_color" not in mesh.uv_layers:
+        mesh.uv_layers.new(name="uv_color")
+    
     uv_layer = mesh.uv_layers["uv_color"].data
 
-    # Calculate the correct UV coordinates for the given color index
     settings = context.scene.extended_material_settings
     palette_rows = settings.palette_rows
     palette_columns = settings.palette_columns
     
-    # Tile size calculations
     tile_width = 1 / palette_columns
     tile_height = 1 / palette_rows
     
-    # Calculate UV coordinates (tile_x, tile_y) based on color index
     row = color_index // palette_columns
     col = color_index % palette_columns
     tile_x = (col + 0.5) * tile_width
     tile_y = (row + 0.5) * tile_height
 
-    # Assign UVs for the specified faces to these coordinates
+    # Apply UV modifications
     for face_idx in faces:
         poly = mesh.polygons[face_idx]
         for loop_index in poly.loop_indices:
             loop_uv = uv_layer[loop_index]
             loop_uv.uv = (tile_x, tile_y)
+
+    # Restore the original mode
+    bpy.ops.object.mode_set(mode=current_mode)
+
 
 class MATERIAL_OT_create_palette(Operator):
     bl_idname = "material.create_palette"
@@ -306,25 +335,21 @@ class MATERIAL_OT_default_palette(Operator):
 
     def execute(self, context):
         # Color palette defined as (R, G, B) tuples
-        STANDARD_PALETTE = [
-            (0.2, 0.2, 0.2),    # dark grey
-            (0.4, 0.4, 0.4),    # medium grey
-            (0.6, 0.6, 0.6),    # light grey
-            (0.8, 0.8, 0.8),    # lighter grey
-            (0.45, 0.27, 0.07), # dark brown
-            (0.7, 0.5, 0.3),    # light brown
-            (0.1, 0.1, 0.4),    # dark blue
-            (0.3, 0.3, 0.6),    # light blue
-            (0.0, 0.5, 0.0),    # dark green
-            (0.4, 0.8, 0.4),    # light green
-            (0.5, 0.0, 0.0),    # dark red
-            (0.8, 0.2, 0.2),    # light red
-            (1.0, 0.6, 0.0),    # orange
-            (1.0, 0.8, 0.4),    # light orange
-            (0.5, 0.5, 0.5),    # green-grey
-            (0.7, 0.7, 0.7)     # light green-grey
+        DEFAULT_PALETTE = [
+        # 6 tones of cool grey
+        (0.5, 0.5, 0.55), (0.45, 0.45, 0.5), (0.4, 0.4, 0.45), (0.35, 0.35, 0.4), (0.3, 0.3, 0.35), (0.25, 0.25, 0.3),
+        # 6 tones of warm grey
+        (0.5, 0.5, 0.4), (0.45, 0.45, 0.35), (0.4, 0.4, 0.3), (0.35, 0.35, 0.25), (0.3, 0.3, 0.2), (0.25, 0.25, 0.15),
+        # 3 of warm brown, 3 of yellow brown
+        (0.45, 0.3, 0.1), (0.4, 0.25, 0.05), (0.35, 0.2, 0), (0.55, 0.45, 0.1), (0.5, 0.4, 0.05), (0.45, 0.35, 0),
+        # 3 of red, 3 of blue
+        (0.7, 0.2, 0.2), (0.6, 0.1, 0.1), (0.5, 0, 0), (0.2, 0.2, 0.7), (0.1, 0.1, 0.6), (0, 0, 0.5),
+        # 3 of orange, 3 of light cream
+        (1.0, 0.6, 0.2), (0.9, 0.5, 0.1), (0.8, 0.4, 0), (0.98, 0.98, 0.8), (0.96, 0.96, 0.7), (0.94, 0.94, 0.6),
+        # 3 of warm green, 3 of hard green
+        (0.3, 0.5, 0.3), (0.25, 0.45, 0.25), (0.2, 0.4, 0.2), (0.1, 0.5, 0.1), (0.05, 0.45, 0.05), (0, 0.4, 0)
         ]
-
+        
         obj = context.active_object
         texture_name = f"{obj.name}_texture_color"
         texture = bpy.data.images.get(texture_name)
@@ -333,6 +358,8 @@ class MATERIAL_OT_default_palette(Operator):
             return {'CANCELLED'}
 
         settings = context.scene.extended_material_settings
+        settings.palette_rows = 6
+        settings.palette_columns = 6
         palette_rows = settings.palette_rows
         palette_columns = settings.palette_columns
 
@@ -347,9 +374,9 @@ class MATERIAL_OT_default_palette(Operator):
         color_index = 0
         for row in range(palette_rows):
             for col in range(palette_columns):
-                if color_index >= len(STANDARD_PALETTE):  # Prevent going out of bounds
+                if color_index >= len(DEFAULT_PALETTE):  # Prevent going out of bounds
                     break
-                color = STANDARD_PALETTE[color_index]
+                color = DEFAULT_PALETTE[color_index]
                 for y in range(row * cell_height, (row + 1) * cell_height):
                     for x in range(col * cell_width, (col + 1) * cell_width):
                         index = (y * width + x) * 4
@@ -370,7 +397,6 @@ class MATERIAL_OT_set_face_color(Operator):
     bl_label = "Set Face Color"
     bl_description = "Sets the selected faces to a specific color in the palette"
     bl_options = {'REGISTER', 'UNDO'}
-    color_index: IntProperty(name="Color Index", min=1, max=16, default=1)
 
     @classmethod
     def poll(cls, context):
@@ -380,9 +406,19 @@ class MATERIAL_OT_set_face_color(Operator):
             context.object.data.total_face_sel > 0
 
     def execute(self, context):
-        # Placeholder for setting face color
+        obj = context.object
+        mesh = obj.data
+        color_index = context.scene.extended_material_settings.color_index - 1  # Adjust for 0-based index
+
+        # Collect indices of selected faces
+        selected_faces = [p.index for p in mesh.polygons if p.select]
+
+        # Call the function to assign UV coordinates based on the color index
+        assign_faces_to_color(context, selected_faces, color_index)
+
         self.report({'INFO'}, "Face color set")
         return {'FINISHED'}
+    
 
 class MATERIAL_OT_bake_ao(Operator):
     bl_idname = "material.bake_ao"
