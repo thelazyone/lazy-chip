@@ -104,7 +104,6 @@ class MATERIAL_OT_generate_materials(Operator):
                         island_margin=0.00,
                         area_weight=0.00,
                         margin_method='SCALED',
-                        rotate_method='AXIS_ALIGNED_Y',
                         correct_aspect=True,
                         scale_to_bounds=False
                 )
