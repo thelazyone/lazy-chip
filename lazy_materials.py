@@ -13,6 +13,7 @@ bl_info = {
 import bpy
 from bpy.types import Operator, Panel
 from bpy.props import IntProperty
+import math as m
 
 # Setting for the plugin.
 class ExtendedMaterialSettings(bpy.types.PropertyGroup):
@@ -68,6 +69,14 @@ class MATERIAL_OT_generate_materials(Operator):
         selected_objects = context.selected_objects
         for obj in selected_objects:
             if obj.type == 'MESH':
+                
+                # Apply transformations
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.mode_set(mode='OBJECT')
+                bpy.ops.object.select_all(action='DESELECT')
+                obj.select_set(True)
+                bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+
                 # Define unique names based on the object name
                 texture_color_name = f"{obj.name}_texture_color"
                 texture_ao_name = f"{obj.name}_texture_ao"
@@ -80,6 +89,28 @@ class MATERIAL_OT_generate_materials(Operator):
                     uv_layers.new(name="uv_color")
                 if "uv_ao" not in uv_layers:
                     uv_layers.new(name="uv_ao")
+
+                # Switch to edit mode to perform UV operations
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.mode_set(mode='EDIT')
+
+                # Unwrap each UV map separately with adjusted settings
+                bpy.ops.object.mode_set(mode='EDIT')
+                for uv_name in ["uv_color", "uv_ao"]:
+                    uv_layers.active = uv_layers[uv_name]
+                    bpy.ops.mesh.select_all(action='SELECT')
+                    bpy.ops.uv.smart_project(
+                        angle_limit=m.radians(66),
+                        island_margin=0.00,
+                        area_weight=0.00,
+                        margin_method='SCALED',
+                        rotate_method='AXIS_ALIGNED_Y',
+                        correct_aspect=True,
+                        scale_to_bounds=False
+                )
+                    
+                # Switch back to object mode after unwrapping
+                bpy.ops.object.mode_set(mode='OBJECT')
 
                 # Manage existing textures
                 old_texture_color = bpy.data.images.get(texture_color_name)
