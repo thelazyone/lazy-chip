@@ -14,6 +14,9 @@ import bpy
 from bpy.types import Operator, Panel
 from bpy.props import IntProperty
 import math as m
+import random   # for UV settings
+import colorsys  # for Palette
+
 
 # Setting for the plugin.
 class ExtendedMaterialSettings(bpy.types.PropertyGroup):
@@ -187,8 +190,8 @@ class MATERIAL_OT_create_palette(Operator):
     bl_label = "Create Color Palette"
     bl_description = "Creates a color palette based on specified grid size"
     bl_options = {'REGISTER', 'UNDO'}
-    palette_rows: IntProperty(name="Rows", min=1, max=4, default=1)
-    palette_columns: IntProperty(name="Columns", min=1, max=4, default=1)
+    #palette_rows: IntProperty(name="Rows", min=1, max=4, default=1)
+    #palette_columns: IntProperty(name="Columns", min=1, max=4, default=1)
 
     @classmethod
     def poll(cls, context):
@@ -197,9 +200,50 @@ class MATERIAL_OT_create_palette(Operator):
             context.mode == 'OBJECT'
     
     def execute(self, context):
-        # Placeholder for creating the palette
+        obj = context.active_object
+        texture_name = f"{obj.name}_texture_color"
+        texture = bpy.data.images.get(texture_name)
+        if not texture:
+            self.report({'ERROR'}, "Texture not found")
+            return {'CANCELLED'}
+
+        width, height = texture.size
+        pixels = list(texture.pixels)
+
+        settings = context.scene.extended_material_settings
+        palette_rows = settings.palette_rows
+        palette_columns = settings.palette_columns
+
+        # Calculate the size of each grid cell
+        cell_width = int(width / palette_columns)
+        cell_height = int(height / palette_rows)
+
+        # Function to generate a random color
+        def random_color():
+            hue = random.random()  # Random hue
+            saturation = 0.75  # Fixed saturation
+            value = 1.0  # Fixed value
+            return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
+
+        # Iterate over each cell in the grid
+        for row in range(palette_rows):
+            for col in range(palette_columns):
+                color = random_color()  # Get RGB tuple
+
+                # Fill the cell with the color
+                for y in range(row * cell_height, (row + 1) * cell_height):
+                    for x in range(col * cell_width, (col + 1) * cell_width):
+                        index = (y * width + x) * 4  # Pixel index (each pixel has 4 values: RGBA)
+                        pixels[index:index+3] = color  # Set RGB
+                        pixels[index+3] = 1.0  # Set Alpha
+
+        # Update the texture
+        texture.pixels = pixels
+        texture.update()
+
         self.report({'INFO'}, "Color palette created")
         return {'FINISHED'}
+    
 
 class MATERIAL_OT_set_face_color(Operator):
     bl_idname = "material.set_face_color"
@@ -325,6 +369,7 @@ class MATERIAL_PT_custom_panel(Panel):
         col = layout.column()
         col.enabled = "uv_ao" in context.active_object.data.uv_layers.keys() and context.mode == 'OBJECT'
         col.operator(MATERIAL_OT_bake_ao.bl_idname)
+
 
 def register():
     bpy.utils.register_class(ExtendedMaterialSettings)
