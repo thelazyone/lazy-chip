@@ -219,17 +219,60 @@ class MATERIAL_OT_view_both(bpy.types.Operator):
     bl_label = "View Combined Material"
     bl_description = "Switches to a material that combines color and AO"
 
+class MATERIAL_OT_view_both(bpy.types.Operator):
+    bl_idname = "material.view_both"
+    bl_label = "View Combined Material"
+    bl_description = "Creates and switches to a material that combines color and AO"
+
     def execute(self, context):
         obj = context.object
-        # Assuming the combined material is already created and named appropriately
-        combined_mat = bpy.data.materials.get(f"{obj.name}_Combined_Material")
-        if combined_mat:
-            obj.active_material = combined_mat
-        else:
-            self.report({'ERROR'}, "Combined material not found.")
+        combined_mat_name = f"{obj.name}_Combined_Material"
+
+        # Check if the combined material already exists, otherwise create it
+        combined_mat = bpy.data.materials.get(combined_mat_name)
+        if not combined_mat:
+            combined_mat = bpy.data.materials.new(name=combined_mat_name)
+
+        # Use nodes in the combined material and clear existing nodes
+        combined_mat.use_nodes = True
+        nodes = combined_mat.node_tree.nodes
+        nodes.clear()  # Clear any existing nodes to avoid duplicates
+
+        # Create nodes for the color and AO textures
+        color_tex_node = nodes.new('ShaderNodeTexImage')
+        color_tex_node.image = bpy.data.images.get(f"{obj.name}_texture_color")
+        ao_tex_node = nodes.new('ShaderNodeTexImage')
+        ao_tex_node.image = bpy.data.images.get(f"{obj.name}_texture_ao")
+
+        # Create UV Map nodes for each texture
+        uv_color_node = nodes.new('ShaderNodeUVMap')
+        uv_color_node.uv_map = 'uv_color'
+        uv_ao_node = nodes.new('ShaderNodeUVMap')
+        uv_ao_node.uv_map = 'uv_ao'
+
+        # Create a mix node to blend the two textures
+        mix_node = nodes.new('ShaderNodeMixRGB')
+        mix_node.blend_type = 'MULTIPLY'
+
+        # Output node
+        output_node = nodes.new('ShaderNodeOutputMaterial')
+
+        # Connect the nodes
+        links = combined_mat.node_tree.links
+        links.new(uv_color_node.outputs['UV'], color_tex_node.inputs['Vector'])
+        links.new(uv_ao_node.outputs['UV'], ao_tex_node.inputs['Vector'])
+        links.new(color_tex_node.outputs['Color'], mix_node.inputs[1])
+        links.new(ao_tex_node.outputs['Color'], mix_node.inputs[2])
+        links.new(mix_node.outputs['Color'], output_node.inputs['Surface'])
+
+        # Apply the combined material to the object if not already applied
+        if combined_mat_name not in [mat.name for mat in obj.data.materials]:
+            obj.data.materials.append(combined_mat)
+
+        obj.active_material = combined_mat
+
+        self.report({'INFO'}, "Combined material applied")
         return {'FINISHED'}
-
-
 
 # FACES MANIPULATION!
 
