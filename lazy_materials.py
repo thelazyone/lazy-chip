@@ -53,10 +53,10 @@ class MATERIAL_OT_delete_materials(Operator):
         self.report({'INFO'}, "Deleted materials from selected objects")
         return {'FINISHED'}
     
-class MATERIAL_OT_smart_uv_unwrap(Operator):
-    bl_idname = "uv.smart_uv_unwrap"
-    bl_label = "Smart UV Unwrap"
-    bl_description = "Performs a smart UV unwrap creating two UV maps: uv_color and uv_ao"
+class MATERIAL_OT_generate_materials(Operator):
+    bl_idname = "uv.generate_materials"
+    bl_label = "Generate Materials and UVs"
+    bl_description = "Generates Materials, UVs and Textures for color and AO"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -68,14 +68,14 @@ class MATERIAL_OT_smart_uv_unwrap(Operator):
         selected_objects = context.selected_objects
         for obj in selected_objects:
             if obj.type == 'MESH':
-                # Ensure uv_color and uv_ao are unique and added only if they don't exist
+                # Ensure UV maps are added if they do not exist
                 uv_layers = obj.data.uv_layers
                 if "uv_color" not in uv_layers:
                     uv_layers.new(name="uv_color")
                 if "uv_ao" not in uv_layers:
                     uv_layers.new(name="uv_ao")
-                
-                # Must switch to edit mode to perform UV operations
+
+                # Switch to edit mode to perform UV operations
                 bpy.context.view_layer.objects.active = obj
                 bpy.ops.object.mode_set(mode='EDIT')
 
@@ -85,11 +85,51 @@ class MATERIAL_OT_smart_uv_unwrap(Operator):
                     bpy.ops.mesh.select_all(action='SELECT')
                     bpy.ops.uv.smart_project()
 
-                # Switch back to object mode after unwrapping
+                # Switch back to object mode
                 bpy.ops.object.mode_set(mode='OBJECT')
-                    
-        self.report({'INFO'}, "Smart UV Unwrap completed with uv_color and uv_ao maps")
+
+                # Create image textures
+                bpy.ops.image.new(name="texture_color", width=1024, height=1024, color=(0.0, 1.0, 0.0, 1.0))  # Green
+                bpy.ops.image.new(name="texture_ao", width=1024, height=1024, color=(1.0, 1.0, 1.0, 1.0))  # White
+
+                # Create materials and assign them textures and UV maps
+                mat_color = bpy.data.materials.new(name="Material_Color")
+                mat_ao = bpy.data.materials.new(name="Material_AO")
+                mat_color.use_nodes = True
+                mat_ao.use_nodes = True
+                
+                # Set up nodes for color material
+                bsdf_color = mat_color.node_tree.nodes.get('Principled BSDF')
+                tex_image_color = mat_color.node_tree.nodes.new('ShaderNodeTexImage')
+                tex_image_color.image = bpy.data.images['texture_color']
+                uv_map_color = mat_color.node_tree.nodes.new('ShaderNodeUVMap')
+                uv_map_color.uv_map = "uv_color"
+                mat_color.node_tree.links.new(uv_map_color.outputs['UV'], tex_image_color.inputs['Vector'])
+                mat_color.node_tree.links.new(bsdf_color.inputs['Base Color'], tex_image_color.outputs['Color'])
+                
+                # Set up nodes for AO material
+                bsdf_ao = mat_ao.node_tree.nodes.get('Principled BSDF')
+                tex_image_ao = mat_ao.node_tree.nodes.new('ShaderNodeTexImage')
+                tex_image_ao.image = bpy.data.images['texture_ao']
+                uv_map_ao = mat_ao.node_tree.nodes.new('ShaderNodeUVMap')
+                uv_map_ao.uv_map = "uv_ao"
+                mat_ao.node_tree.links.new(uv_map_ao.outputs['UV'], tex_image_ao.inputs['Vector'])
+                mat_ao.node_tree.links.new(bsdf_ao.inputs['Base Color'], tex_image_ao.outputs['Color'])
+                
+                # Assign materials to the object
+                if obj.data.materials:
+                    obj.data.materials[0] = mat_color
+                    if len(obj.data.materials) > 1:
+                        obj.data.materials[1] = mat_ao
+                    else:
+                        obj.data.materials.append(mat_ao)
+                else:
+                    obj.data.materials.append(mat_color)
+                    obj.data.materials.append(mat_ao)
+
+        self.report({'INFO'}, "UV maps, textures, and materials created")
         return {'FINISHED'}
+
 
 
 class MATERIAL_OT_create_palette(Operator):
@@ -166,7 +206,7 @@ class MATERIAL_PT_custom_panel(Panel):
 
         layout.separator()
         layout.label(text="UV Mapping")
-        layout.operator(MATERIAL_OT_smart_uv_unwrap.bl_idname)
+        layout.operator(MATERIAL_OT_generate_materials.bl_idname)
 
         layout.separator()
         layout.label(text="Color Palette")
@@ -195,7 +235,7 @@ def register():
     bpy.types.Scene.extended_material_settings = bpy.props.PointerProperty(type=ExtendedMaterialSettings)
 
     bpy.utils.register_class(MATERIAL_OT_delete_materials)
-    bpy.utils.register_class(MATERIAL_OT_smart_uv_unwrap)
+    bpy.utils.register_class(MATERIAL_OT_generate_materials)
     bpy.utils.register_class(MATERIAL_OT_bake_ao)
     bpy.utils.register_class(MATERIAL_OT_create_palette)
     bpy.utils.register_class(MATERIAL_OT_set_face_color)
@@ -206,7 +246,7 @@ def unregister():
     del bpy.types.Scene.extended_material_settings
 
     bpy.utils.unregister_class(MATERIAL_OT_delete_materials)
-    bpy.utils.unregister_class(MATERIAL_OT_smart_uv_unwrap)
+    bpy.utils.unregister_class(MATERIAL_OT_generate_materials)
     bpy.utils.unregister_class(MATERIAL_OT_bake_ao)
     bpy.utils.unregister_class(MATERIAL_OT_create_palette)
     bpy.utils.unregister_class(MATERIAL_OT_set_face_color)
