@@ -63,11 +63,17 @@ class MATERIAL_OT_generate_materials(Operator):
     def poll(cls, context):
         return context.object is not None and context.object.type == 'MESH' and \
             len(context.selected_objects) == 1 and context.mode == 'OBJECT'
-
+    
     def execute(self, context):
         selected_objects = context.selected_objects
         for obj in selected_objects:
             if obj.type == 'MESH':
+                # Define unique names based on the object name
+                texture_color_name = f"{obj.name}_texture_color"
+                texture_ao_name = f"{obj.name}_texture_ao"
+                material_color_name = f"{obj.name}_Material_Color"
+                material_ao_name = f"{obj.name}_Material_AO"
+
                 # Ensure UV maps are added if they do not exist
                 uv_layers = obj.data.uv_layers
                 if "uv_color" not in uv_layers:
@@ -75,61 +81,75 @@ class MATERIAL_OT_generate_materials(Operator):
                 if "uv_ao" not in uv_layers:
                     uv_layers.new(name="uv_ao")
 
-                # Switch to edit mode to perform UV operations
-                bpy.context.view_layer.objects.active = obj
-                bpy.ops.object.mode_set(mode='EDIT')
+                # Manage existing textures
+                old_texture_color = bpy.data.images.get(texture_color_name)
+                if old_texture_color:
+                    if old_texture_color.users == 1:
+                        bpy.data.images.remove(old_texture_color)
+                    else:
+                        old_texture_color.user_clear()  # Clear users if more than one
 
-                # Unwrap each UV map separately
-                for uv_name in ["uv_color", "uv_ao"]:
-                    uv_layers.active = uv_layers[uv_name]
-                    bpy.ops.mesh.select_all(action='SELECT')
-                    bpy.ops.uv.smart_project()
+                old_texture_ao = bpy.data.images.get(texture_ao_name)
+                if old_texture_ao:
+                    if old_texture_ao.users == 1:
+                        bpy.data.images.remove(old_texture_ao)
+                    else:
+                        old_texture_ao.user_clear()
 
-                # Switch back to object mode
-                bpy.ops.object.mode_set(mode='OBJECT')
+                # Create or find textures
+                if texture_color_name not in bpy.data.images:
+                    texture_color = bpy.data.images.new(name=texture_color_name, width=1024, height=1024, alpha=True)
+                    # Fill the image with green color
+                    fill_color = (0.0, 1.0, 0.0, 1.0)  # RGBA for green
+                    texture_color.pixels = [val for _ in range(texture_color.size[0] * texture_color.size[1]) for val in fill_color]
+                else:
+                    texture_color = bpy.data.images[texture_color_name]
 
-                # Create image textures
-                bpy.ops.image.new(name="texture_color", width=1024, height=1024, color=(0.0, 1.0, 0.0, 1.0))  # Green
-                bpy.ops.image.new(name="texture_ao", width=1024, height=1024, color=(1.0, 1.0, 1.0, 1.0))  # White
+                if texture_ao_name not in bpy.data.images:
+                    texture_ao = bpy.data.images.new(name=texture_ao_name, width=1024, height=1024, alpha=True)
+                    # Fill the image with white color
+                    fill_color = (1.0, 1.0, 1.0, 1.0)  # RGBA for white
+                    texture_ao.pixels = [val for _ in range(texture_ao.size[0] * texture_ao.size[1]) for val in fill_color]
+                else:
+                    texture_ao = bpy.data.images[texture_ao_name]
 
-                # Create materials and assign them textures and UV maps
-                mat_color = bpy.data.materials.new(name="Material_Color")
-                mat_ao = bpy.data.materials.new(name="Material_AO")
-                mat_color.use_nodes = True
-                mat_ao.use_nodes = True
-                
-                # Set up nodes for color material
-                bsdf_color = mat_color.node_tree.nodes.get('Principled BSDF')
+                # Create or find materials
+                mat_color = bpy.data.materials.get(material_color_name) or bpy.data.materials.new(name=material_color_name)
+                mat_ao = bpy.data.materials.get(material_ao_name) or bpy.data.materials.new(name=material_ao_name)
+
+                # Setup material node tree for color
+                if mat_color.use_nodes:
+                    bsdf_color = mat_color.node_tree.nodes.get('Principled BSDF')
+                else:
+                    mat_color.use_nodes = True
+                    bsdf_color = mat_color.node_tree.nodes.get('Principled BSDF')
                 tex_image_color = mat_color.node_tree.nodes.new('ShaderNodeTexImage')
-                tex_image_color.image = bpy.data.images['texture_color']
+                tex_image_color.image = texture_color
                 uv_map_color = mat_color.node_tree.nodes.new('ShaderNodeUVMap')
                 uv_map_color.uv_map = "uv_color"
                 mat_color.node_tree.links.new(uv_map_color.outputs['UV'], tex_image_color.inputs['Vector'])
                 mat_color.node_tree.links.new(bsdf_color.inputs['Base Color'], tex_image_color.outputs['Color'])
-                
-                # Set up nodes for AO material
-                bsdf_ao = mat_ao.node_tree.nodes.get('Principled BSDF')
+
+                # Setup material node tree for AO
+                if mat_ao.use_nodes:
+                    bsdf_ao = mat_ao.node_tree.nodes.get('Principled BSDF')
+                else:
+                    mat_ao.use_nodes = True
+                    bsdf_ao = mat_ao.node_tree.nodes.get('Principled BSDF')
                 tex_image_ao = mat_ao.node_tree.nodes.new('ShaderNodeTexImage')
-                tex_image_ao.image = bpy.data.images['texture_ao']
+                tex_image_ao.image = texture_ao
                 uv_map_ao = mat_ao.node_tree.nodes.new('ShaderNodeUVMap')
                 uv_map_ao.uv_map = "uv_ao"
                 mat_ao.node_tree.links.new(uv_map_ao.outputs['UV'], tex_image_ao.inputs['Vector'])
                 mat_ao.node_tree.links.new(bsdf_ao.inputs['Base Color'], tex_image_ao.outputs['Color'])
-                
+
                 # Assign materials to the object
-                if obj.data.materials:
-                    obj.data.materials[0] = mat_color
-                    if len(obj.data.materials) > 1:
-                        obj.data.materials[1] = mat_ao
-                    else:
-                        obj.data.materials.append(mat_ao)
-                else:
-                    obj.data.materials.append(mat_color)
-                    obj.data.materials.append(mat_ao)
+                obj.data.materials.clear()
+                obj.data.materials.append(mat_color)
+                obj.data.materials.append(mat_ao)
 
-        self.report({'INFO'}, "UV maps, textures, and materials created")
+        self.report({'INFO'}, "UV maps, textures, and materials uniquely created or updated for each object")
         return {'FINISHED'}
-
 
 
 class MATERIAL_OT_create_palette(Operator):
@@ -178,15 +198,61 @@ class MATERIAL_OT_bake_ao(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.object is not None and \
-            context.object.type == 'MESH' and  \
-            len(context.selected_objects) == 1 and \
-            context.mode == 'OBJECT'
-        
+        obj = context.active_object
+        return obj is not None and \
+               "uv_ao" in obj.data.uv_layers.keys() and \
+               obj.type == 'MESH' and \
+               len(context.selected_objects) == 1 and \
+               context.mode == 'OBJECT'
+
     def execute(self, context):
+        # Ensure the scene's renderer is set to Cycles
         context.scene.render.engine = 'CYCLES'
-        # Placeholder for baking AO
-        self.report({'INFO'}, "AO baked")
+
+        obj = context.active_object
+
+        # Define unique material and texture names based on object name
+        material_ao_name = f"{obj.name}_Material_AO"
+        texture_ao_name = f"{obj.name}_texture_ao"
+
+        # Find or create the AO material and image
+        mat_ao = bpy.data.materials.get(material_ao_name)
+        if not mat_ao:
+            self.report({'ERROR'}, "AO Material not found: " + material_ao_name)
+            return {'CANCELLED'}
+        
+        image_ao = bpy.data.images.get(texture_ao_name)
+        if not image_ao:
+            self.report({'ERROR'}, "AO Texture not found: " + texture_ao_name)
+            return {'CANCELLED'}
+        
+        # Prepare the object for baking by selecting it and assigning the AO material
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+
+        obj.data.materials.clear()
+        obj.data.materials.append(mat_ao)
+
+        # Create a new image node for the AO texture and set it as active for baking
+        node_tree = mat_ao.node_tree
+        bake_node = node_tree.nodes.new(type='ShaderNodeTexImage')
+        bake_node.image = image_ao
+        node_tree.nodes.active = bake_node
+
+        # Configure bake settings
+        context.scene.cycles.bake_type = 'AO'
+        context.scene.render.bake.use_selected_to_active = False
+        context.scene.render.bake.use_clear = True
+        context.scene.render.bake.margin = 2  # Adjust based on your needs
+
+        # Perform the bake
+        bpy.ops.object.bake(type='AO')
+
+        # Clean up: remove the temporary image node
+        node_tree.nodes.remove(bake_node)
+
+        self.report({'INFO'}, "AO baked successfully")
         return {'FINISHED'}
 
 class MATERIAL_PT_custom_panel(Panel):
