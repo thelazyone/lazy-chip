@@ -183,22 +183,72 @@ class MATERIAL_OT_generate_materials(Operator):
 
         self.report({'INFO'}, "UV maps, textures, and materials uniquely created or updated for each object")
         return {'FINISHED'}
-
+    
 
 class MATERIAL_OT_create_palette(Operator):
     bl_idname = "material.create_palette"
     bl_label = "Create Color Palette"
     bl_description = "Creates a color palette based on specified grid size"
     bl_options = {'REGISTER', 'UNDO'}
-    #palette_rows: IntProperty(name="Rows", min=1, max=4, default=1)
-    #palette_columns: IntProperty(name="Columns", min=1, max=4, default=1)
 
     @classmethod
     def poll(cls, context):
         return context.object is not None and \
-            "uv_color" in context.object.data.uv_layers.keys() and \
-            context.mode == 'OBJECT'
+               "uv_color" in context.object.data.uv_layers.keys() and \
+               context.mode == 'OBJECT'
     
+    def random_color(self):
+        """Generate a random color."""
+        hue = random.random()  # Random hue
+        saturation = 0.75  # Fixed saturation
+        value = 1.0  # Fixed value
+        return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
+    
+    def color_index_to_xy(self, context, index):  
+        settings = context.scene.extended_material_settings
+        palette_columns = settings.palette_columns
+        tile_x = (index % palette_columns)
+        tile_y = (index // palette_columns)
+        return (tile_x, tile_y)
+
+    def initialize_all_faces_random(self, context):
+        obj = context.object
+        mesh = obj.data
+        settings = context.scene.extended_material_settings
+        num_colors = settings.palette_columns * settings.palette_rows
+
+        for poly in mesh.polygons:
+            random_color_index = random.randint(0, num_colors - 1)
+            self.assign_faces_to_color(context, [poly.index], random_color_index)
+
+    def assign_faces_to_color(self, context, faces, color_index):
+        obj = context.object
+        mesh = obj.data
+        # Access the specific UV map by name instead of using the active one
+        uv_layer = mesh.uv_layers["uv_color"].data
+
+        # Calculate the correct UV coordinates for the given color index
+        settings = context.scene.extended_material_settings
+        palette_rows = settings.palette_rows
+        palette_columns = settings.palette_columns
+        
+        # Tile size calculations
+        tile_width = 1 / palette_columns
+        tile_height = 1 / palette_rows
+        
+        # Calculate UV coordinates (tile_x, tile_y) based on color index
+        row = color_index // palette_columns
+        col = color_index % palette_columns
+        tile_x = (col + 0.5) * tile_width
+        tile_y = (row + 0.5) * tile_height
+
+        # Assign UVs for the specified faces to these coordinates
+        for face_idx in faces:
+            poly = mesh.polygons[face_idx]
+            for loop_index in poly.loop_indices:
+                loop_uv = uv_layer[loop_index]
+                loop_uv.uv = (tile_x, tile_y)
+
     def execute(self, context):
         obj = context.active_object
         texture_name = f"{obj.name}_texture_color"
@@ -207,41 +257,35 @@ class MATERIAL_OT_create_palette(Operator):
             self.report({'ERROR'}, "Texture not found")
             return {'CANCELLED'}
 
-        width, height = texture.size
-        pixels = list(texture.pixels)
-
         settings = context.scene.extended_material_settings
         palette_rows = settings.palette_rows
         palette_columns = settings.palette_columns
+
+        width, height = texture.size
+        pixels = [0] * (width * height * 4)
 
         # Calculate the size of each grid cell
         cell_width = int(width / palette_columns)
         cell_height = int(height / palette_rows)
 
-        # Function to generate a random color
-        def random_color():
-            hue = random.random()  # Random hue
-            saturation = 0.75  # Fixed saturation
-            value = 1.0  # Fixed value
-            return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
-
         # Iterate over each cell in the grid
         for row in range(palette_rows):
             for col in range(palette_columns):
-                color = random_color()  # Get RGB tuple
-
-                # Fill the cell with the color
+                color = self.random_color()
                 for y in range(row * cell_height, (row + 1) * cell_height):
                     for x in range(col * cell_width, (col + 1) * cell_width):
-                        index = (y * width + x) * 4  # Pixel index (each pixel has 4 values: RGBA)
-                        pixels[index:index+3] = color  # Set RGB
-                        pixels[index+3] = 1.0  # Set Alpha
+                        index = (y * width + x) * 4
+                        pixels[index:index+3] = color
+                        pixels[index+3] = 1.0
 
         # Update the texture
         texture.pixels = pixels
         texture.update()
 
-        self.report({'INFO'}, "Color palette created")
+        # Initialize all faces randomly and position UVs
+        self.initialize_all_faces_random(context)
+
+        self.report({'INFO'}, "Color palette created and faces initialized")
         return {'FINISHED'}
     
 
