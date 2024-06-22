@@ -183,7 +183,59 @@ class MATERIAL_OT_generate_materials(Operator):
 
         self.report({'INFO'}, "UV maps, textures, and materials uniquely created or updated for each object")
         return {'FINISHED'}
+
+def color_index_to_xy(context, index):  
+    settings = context.scene.extended_material_settings
+    palette_columns = settings.palette_columns
+    tile_x = (index % palette_columns)
+    tile_y = (index // palette_columns)
+    return (tile_x, tile_y)
+
+def random_color():
+    """Generate a random color."""
+    hue = random.random()  # Random hue
+    saturation = 0.75  # Fixed saturation
+    value = 1.0  # Fixed value
+    return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
+
+def initialize_all_faces_random(context):
+    obj = context.object
+    mesh = obj.data
+    settings = context.scene.extended_material_settings
+    num_colors = settings.palette_columns * settings.palette_rows
+
+    for poly in mesh.polygons:
+        random_color_index = random.randint(0, num_colors - 1)
+        assign_faces_to_color(context, [poly.index], random_color_index)
+
+
+def assign_faces_to_color(context, faces, color_index):
+    obj = context.object
+    mesh = obj.data
+    # Access the specific UV map by name instead of using the active one
+    uv_layer = mesh.uv_layers["uv_color"].data
+
+    # Calculate the correct UV coordinates for the given color index
+    settings = context.scene.extended_material_settings
+    palette_rows = settings.palette_rows
+    palette_columns = settings.palette_columns
     
+    # Tile size calculations
+    tile_width = 1 / palette_columns
+    tile_height = 1 / palette_rows
+    
+    # Calculate UV coordinates (tile_x, tile_y) based on color index
+    row = color_index // palette_columns
+    col = color_index % palette_columns
+    tile_x = (col + 0.5) * tile_width
+    tile_y = (row + 0.5) * tile_height
+
+    # Assign UVs for the specified faces to these coordinates
+    for face_idx in faces:
+        poly = mesh.polygons[face_idx]
+        for loop_index in poly.loop_indices:
+            loop_uv = uv_layer[loop_index]
+            loop_uv.uv = (tile_x, tile_y)
 
 class MATERIAL_OT_create_palette(Operator):
     bl_idname = "material.create_palette"
@@ -197,58 +249,6 @@ class MATERIAL_OT_create_palette(Operator):
                "uv_color" in context.object.data.uv_layers.keys() and \
                context.mode == 'OBJECT'
     
-    def random_color(self):
-        """Generate a random color."""
-        hue = random.random()  # Random hue
-        saturation = 0.75  # Fixed saturation
-        value = 1.0  # Fixed value
-        return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
-    
-    def color_index_to_xy(self, context, index):  
-        settings = context.scene.extended_material_settings
-        palette_columns = settings.palette_columns
-        tile_x = (index % palette_columns)
-        tile_y = (index // palette_columns)
-        return (tile_x, tile_y)
-
-    def initialize_all_faces_random(self, context):
-        obj = context.object
-        mesh = obj.data
-        settings = context.scene.extended_material_settings
-        num_colors = settings.palette_columns * settings.palette_rows
-
-        for poly in mesh.polygons:
-            random_color_index = random.randint(0, num_colors - 1)
-            self.assign_faces_to_color(context, [poly.index], random_color_index)
-
-    def assign_faces_to_color(self, context, faces, color_index):
-        obj = context.object
-        mesh = obj.data
-        # Access the specific UV map by name instead of using the active one
-        uv_layer = mesh.uv_layers["uv_color"].data
-
-        # Calculate the correct UV coordinates for the given color index
-        settings = context.scene.extended_material_settings
-        palette_rows = settings.palette_rows
-        palette_columns = settings.palette_columns
-        
-        # Tile size calculations
-        tile_width = 1 / palette_columns
-        tile_height = 1 / palette_rows
-        
-        # Calculate UV coordinates (tile_x, tile_y) based on color index
-        row = color_index // palette_columns
-        col = color_index % palette_columns
-        tile_x = (col + 0.5) * tile_width
-        tile_y = (row + 0.5) * tile_height
-
-        # Assign UVs for the specified faces to these coordinates
-        for face_idx in faces:
-            poly = mesh.polygons[face_idx]
-            for loop_index in poly.loop_indices:
-                loop_uv = uv_layer[loop_index]
-                loop_uv.uv = (tile_x, tile_y)
-
     def execute(self, context):
         obj = context.active_object
         texture_name = f"{obj.name}_texture_color"
@@ -271,7 +271,7 @@ class MATERIAL_OT_create_palette(Operator):
         # Iterate over each cell in the grid
         for row in range(palette_rows):
             for col in range(palette_columns):
-                color = self.random_color()
+                color = random_color()
                 for y in range(row * cell_height, (row + 1) * cell_height):
                     for x in range(col * cell_width, (col + 1) * cell_width):
                         index = (y * width + x) * 4
@@ -282,10 +282,86 @@ class MATERIAL_OT_create_palette(Operator):
         texture.pixels = pixels
         texture.update()
 
-        # Initialize all faces randomly and position UVs
-        self.initialize_all_faces_random(context)
-
         self.report({'INFO'}, "Color palette created and faces initialized")
+        return {'FINISHED'}
+    
+class MATERIAL_OT_assign_faces_random(Operator):
+    bl_idname = "material.assign_faces_random"
+    bl_label = "Assign Faces At Random"
+    bl_description = "Assigns faces to random color tiles"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        # Initialize all faces randomly and position UVs
+        initialize_all_faces_random(context)
+
+        return {'FINISHED'}
+
+class MATERIAL_OT_default_palette(Operator):
+    bl_idname = "material.default_palette"
+    bl_label = "Default Palette"
+    bl_description = "Loads a color palette from default"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        # Color palette defined as (R, G, B) tuples
+        STANDARD_PALETTE = [
+            (0.2, 0.2, 0.2),    # dark grey
+            (0.4, 0.4, 0.4),    # medium grey
+            (0.6, 0.6, 0.6),    # light grey
+            (0.8, 0.8, 0.8),    # lighter grey
+            (0.45, 0.27, 0.07), # dark brown
+            (0.7, 0.5, 0.3),    # light brown
+            (0.1, 0.1, 0.4),    # dark blue
+            (0.3, 0.3, 0.6),    # light blue
+            (0.0, 0.5, 0.0),    # dark green
+            (0.4, 0.8, 0.4),    # light green
+            (0.5, 0.0, 0.0),    # dark red
+            (0.8, 0.2, 0.2),    # light red
+            (1.0, 0.6, 0.0),    # orange
+            (1.0, 0.8, 0.4),    # light orange
+            (0.5, 0.5, 0.5),    # green-grey
+            (0.7, 0.7, 0.7)     # light green-grey
+        ]
+
+        obj = context.active_object
+        texture_name = f"{obj.name}_texture_color"
+        texture = bpy.data.images.get(texture_name)
+        if not texture:
+            self.report({'ERROR'}, "Texture not found")
+            return {'CANCELLED'}
+
+        settings = context.scene.extended_material_settings
+        palette_rows = settings.palette_rows
+        palette_columns = settings.palette_columns
+
+        width, height = texture.size
+        pixels = [0] * (width * height * 4)
+
+        # Calculate the size of each grid cell
+        cell_width = int(width / palette_columns)
+        cell_height = int(height / palette_rows)
+
+        # Iterate over each cell in the grid, assigning colors from the STANDARD_PALETTE
+        color_index = 0
+        for row in range(palette_rows):
+            for col in range(palette_columns):
+                if color_index >= len(STANDARD_PALETTE):  # Prevent going out of bounds
+                    break
+                color = STANDARD_PALETTE[color_index]
+                for y in range(row * cell_height, (row + 1) * cell_height):
+                    for x in range(col * cell_width, (col + 1) * cell_width):
+                        index = (y * width + x) * 4
+                        pixels[index:index+3] = [color[0], color[1], color[2]]  # Set RGB
+                        pixels[index+3] = 1.0  # Set Alpha
+                color_index += 1
+
+        # Update the texture
+        texture.pixels = pixels
+        texture.update()
+
+        self.report({'INFO'}, "Standard color palette created and applied")
         return {'FINISHED'}
     
 
@@ -400,6 +476,8 @@ class MATERIAL_PT_custom_panel(Panel):
         row.prop(settings, "palette_rows", text="Rows")
         row.prop(settings, "palette_columns", text="Columns")
         col.operator(MATERIAL_OT_create_palette.bl_idname)
+        col.operator(MATERIAL_OT_default_palette.bl_idname)
+        col.operator(MATERIAL_OT_assign_faces_random.bl_idname)
 
         layout.separator()
         layout.label(text="Set Face Color")
@@ -414,7 +492,6 @@ class MATERIAL_PT_custom_panel(Panel):
         col.enabled = "uv_ao" in context.active_object.data.uv_layers.keys() and context.mode == 'OBJECT'
         col.operator(MATERIAL_OT_bake_ao.bl_idname)
 
-
 def register():
     bpy.utils.register_class(ExtendedMaterialSettings)
     bpy.types.Scene.extended_material_settings = bpy.props.PointerProperty(type=ExtendedMaterialSettings)
@@ -423,6 +500,8 @@ def register():
     bpy.utils.register_class(MATERIAL_OT_generate_materials)
     bpy.utils.register_class(MATERIAL_OT_bake_ao)
     bpy.utils.register_class(MATERIAL_OT_create_palette)
+    bpy.utils.register_class(MATERIAL_OT_assign_faces_random)
+    bpy.utils.register_class(MATERIAL_OT_default_palette)
     bpy.utils.register_class(MATERIAL_OT_set_face_color)
     bpy.utils.register_class(MATERIAL_PT_custom_panel)
 
@@ -434,6 +513,8 @@ def unregister():
     bpy.utils.unregister_class(MATERIAL_OT_generate_materials)
     bpy.utils.unregister_class(MATERIAL_OT_bake_ao)
     bpy.utils.unregister_class(MATERIAL_OT_create_palette)
+    bpy.utils.unregister_class(MATERIAL_OT_assign_faces_random)
+    bpy.utils.unregister_class(MATERIAL_OT_default_palette)
     bpy.utils.unregister_class(MATERIAL_OT_set_face_color)
     bpy.utils.unregister_class(MATERIAL_PT_custom_panel)
 
