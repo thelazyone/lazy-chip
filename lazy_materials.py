@@ -183,6 +183,55 @@ class MATERIAL_OT_generate_materials(Operator):
 
         self.report({'INFO'}, "UV maps, textures, and materials uniquely created or updated for each object")
         return {'FINISHED'}
+    
+class MATERIAL_OT_view_color(bpy.types.Operator):
+    bl_idname = "material.view_color"
+    bl_label = "View Color Material"
+    bl_description = "Switches to the color material"
+
+    def execute(self, context):
+        obj = context.object
+        color_mat = bpy.data.materials.get(f"{obj.name}_Material_Color")
+        if color_mat:
+            obj.active_material = color_mat
+        else:
+            self.report({'ERROR'}, "Color material not found.")
+        return {'FINISHED'}
+
+
+class MATERIAL_OT_view_ao(bpy.types.Operator):
+    bl_idname = "material.view_ao"
+    bl_label = "View AO Material"
+    bl_description = "Switches to the AO material"
+
+    def execute(self, context):
+        obj = context.object
+        ao_mat = bpy.data.materials.get(f"{obj.name}_Material_AO")
+        if ao_mat:
+            obj.active_material = ao_mat
+        else:
+            self.report({'ERROR'}, "AO material not found.")
+        return {'FINISHED'}
+    
+
+class MATERIAL_OT_view_both(bpy.types.Operator):
+    bl_idname = "material.view_both"
+    bl_label = "View Combined Material"
+    bl_description = "Switches to a material that combines color and AO"
+
+    def execute(self, context):
+        obj = context.object
+        # Assuming the combined material is already created and named appropriately
+        combined_mat = bpy.data.materials.get(f"{obj.name}_Combined_Material")
+        if combined_mat:
+            obj.active_material = combined_mat
+        else:
+            self.report({'ERROR'}, "Combined material not found.")
+        return {'FINISHED'}
+
+
+
+# FACES MANIPULATION!
 
 def color_index_to_xy(context, index):  
     settings = context.scene.extended_material_settings
@@ -228,7 +277,7 @@ def initialize_all_faces_random(context):
 
     # Restore the original mode
     bpy.ops.object.mode_set(mode=current_mode)
-    
+
 
 def assign_faces_to_color(context, faces, color_index):
     obj = context.object
@@ -484,6 +533,8 @@ class MATERIAL_OT_bake_ao(Operator):
 
         self.report({'INFO'}, "AO baked successfully")
         return {'FINISHED'}
+    
+    
 
 class MATERIAL_PT_custom_panel(Panel):
     bl_label = "Extended Material Tools"
@@ -528,6 +579,14 @@ class MATERIAL_PT_custom_panel(Panel):
         col.enabled = "uv_ao" in context.active_object.data.uv_layers.keys() and context.mode == 'OBJECT'
         col.operator(MATERIAL_OT_bake_ao.bl_idname)
 
+        layout.separator()
+        layout.label(text="View Materials")
+        col = layout.column()
+        row = col.row()
+        row.operator("material.view_color", text="View Color")
+        row.operator("material.view_ao", text="View AO")
+        col.operator("material.view_both", text="View Both")
+
 def register():
     bpy.utils.register_class(ExtendedMaterialSettings)
     bpy.types.Scene.extended_material_settings = bpy.props.PointerProperty(type=ExtendedMaterialSettings)
@@ -539,6 +598,9 @@ def register():
     bpy.utils.register_class(MATERIAL_OT_assign_faces_random)
     bpy.utils.register_class(MATERIAL_OT_default_palette)
     bpy.utils.register_class(MATERIAL_OT_set_face_color)
+    bpy.utils.register_class(MATERIAL_OT_view_color)
+    bpy.utils.register_class(MATERIAL_OT_view_ao)
+    bpy.utils.register_class(MATERIAL_OT_view_both)
     bpy.utils.register_class(MATERIAL_PT_custom_panel)
 
 def unregister():
@@ -552,6 +614,9 @@ def unregister():
     bpy.utils.unregister_class(MATERIAL_OT_assign_faces_random)
     bpy.utils.unregister_class(MATERIAL_OT_default_palette)
     bpy.utils.unregister_class(MATERIAL_OT_set_face_color)
+    bpy.utils.unregister_class(MATERIAL_OT_view_color)
+    bpy.utils.unregister_class(MATERIAL_OT_view_ao)
+    bpy.utils.unregister_class(MATERIAL_OT_view_both)
     bpy.utils.unregister_class(MATERIAL_PT_custom_panel)
 
 if __name__ == "__main__":
