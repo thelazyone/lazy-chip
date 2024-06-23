@@ -185,33 +185,41 @@ class MATERIAL_OT_generate_materials(Operator):
         return {'FINISHED'}
     
 class MATERIAL_OT_view_color(bpy.types.Operator):
+    """Switches to the color material for viewing."""
     bl_idname = "material.view_color"
     bl_label = "View Color Material"
-    bl_description = "Switches to the color material"
-
+    
     def execute(self, context):
         obj = context.object
-        color_mat = bpy.data.materials.get(f"{obj.name}_Material_Color")
-        if color_mat:
-            obj.active_material = color_mat
-        else:
-            self.report({'ERROR'}, "Color material not found.")
-        return {'FINISHED'}
+        mat_color_name = f"{obj.name}_Material_Color"
+        mat_color = bpy.data.materials.get(mat_color_name)
 
+        if mat_color and mat_color.name not in [mat.name for mat in obj.data.materials]:
+            obj.data.materials.append(mat_color)
+
+        # Set as active material for viewing
+        obj.active_material = mat_color
+        self.report({'INFO'}, "Viewing Color Material")
+        return {'FINISHED'}
 
 class MATERIAL_OT_view_ao(bpy.types.Operator):
+    """Switches to the AO material for viewing."""
     bl_idname = "material.view_ao"
     bl_label = "View AO Material"
-    bl_description = "Switches to the AO material"
-
+    
     def execute(self, context):
         obj = context.object
-        ao_mat = bpy.data.materials.get(f"{obj.name}_Material_AO")
-        if ao_mat:
-            obj.active_material = ao_mat
-        else:
-            self.report({'ERROR'}, "AO material not found.")
+        mat_ao_name = f"{obj.name}_Material_AO"
+        mat_ao = bpy.data.materials.get(mat_ao_name)
+
+        if mat_ao and mat_ao.name not in [mat.name for mat in obj.data.materials]:
+            obj.data.materials.append(mat_ao)
+
+        # Set as active material for viewing
+        obj.active_material = mat_ao
+        self.report({'INFO'}, "Viewing AO Material")
         return {'FINISHED'}
+
     
 
 class MATERIAL_OT_view_both(bpy.types.Operator):
