@@ -30,11 +30,6 @@ class ExtendedMaterialSettings(bpy.types.PropertyGroup):
         description="Number of columns in the color palette",
         default=6, min=1, max=6
     )
-    color_index: bpy.props.IntProperty(
-        name="Color Index",
-        description="Index of the color to apply",
-        default=1, min=1, max=36
-    )
 
 class MATERIAL_OT_delete_materials(Operator):
     bl_idname = "material.delete_materials"
@@ -498,6 +493,13 @@ class MATERIAL_OT_set_face_color(Operator):
     bl_description = "Sets the selected faces to a specific color in the palette"
     bl_options = {'REGISTER', 'UNDO'}
 
+    color_index: bpy.props.IntProperty(
+        name="Color Index",
+        description="Index of the color to apply",
+        default=0,
+        min=0
+    )
+
     @classmethod
     def poll(cls, context):
         return context.object is not None and \
@@ -508,15 +510,14 @@ class MATERIAL_OT_set_face_color(Operator):
     def execute(self, context):
         obj = context.object
         mesh = obj.data
-        color_index = context.scene.extended_material_settings.color_index - 1  # Adjust for 0-based index
 
         # Collect indices of selected faces
         selected_faces = [p.index for p in mesh.polygons if p.select]
 
         # Call the function to assign UV coordinates based on the color index
-        assign_faces_to_color(context, selected_faces, color_index)
+        assign_faces_to_color(context, selected_faces, self.color_index)
 
-        self.report({'INFO'}, "Face color set")
+        self.report({'INFO'}, f"Faces color set to index {self.color_index}")
         return {'FINISHED'}
     
 
@@ -585,7 +586,54 @@ class MATERIAL_OT_bake_ao(Operator):
         self.report({'INFO'}, "AO baked successfully")
         return {'FINISHED'}
     
-    
+
+### Color picking
+
+def sample_texture_color(image, x, y):
+    """ Samples the color from the image at normalized coordinates (x, y). """
+    width, height = image.size
+    x_pixel = int(x * width)
+    y_pixel = int(y * height)
+
+    # Ensure we do not go out of bounds
+    x_pixel = max(0, min(x_pixel, width - 1))
+    y_pixel = max(0, min(y_pixel, height - 1))
+
+    # Calculate the index in the flat pixel array
+    index = (y_pixel * width + x_pixel) * 4  # 4 for RGBA
+    r, g, b, a = image.pixels[index:index+4]
+
+    return (r, g, b)
+
+
+def get_palette_colors(obj, num_columns, num_rows):
+    """Retrieve colors from an image based on a grid layout."""
+    texture_color_name = f"{obj.name}_texture_color"  # Adjust based on actual usage
+    image = bpy.data.images.get(texture_color_name)
+    if not image:
+        print(f"Image {texture_color_name} not found!")
+        return []
+
+    width, height = image.size
+    colors = []
+    for row in range(num_rows):
+        row_colors = []
+        for col in range(num_columns):
+            x = (col + 0.5) / num_columns
+            y = (row + 0.5) / num_rows
+            x_pixel = int(x * width)
+            y_pixel = int(y * height)
+
+            # Clamp to image bounds
+            x_pixel = max(0, min(x_pixel, width - 1))
+            y_pixel = max(0, min(y_pixel, height - 1))
+
+            index = (y_pixel * width + x_pixel) * 4  # 4 for RGBA
+            r, g, b, a = image.pixels[index:index+4]
+            row_colors.append((r, g, b))
+        colors.append(row_colors)
+    return colors
+
 
 class MATERIAL_PT_custom_panel(Panel):
     bl_label = "Extended Material Tools"
@@ -621,8 +669,19 @@ class MATERIAL_PT_custom_panel(Panel):
         layout.label(text="Set Face Color")
         col = layout.column()
         col.enabled = context.mode == 'EDIT_MESH' and context.active_object.data.total_face_sel > 0
-        col.prop(settings, "color_index", text="Color Index")
-        col.operator(MATERIAL_OT_set_face_color.bl_idname)
+        obj = context.active_object
+        if obj:
+            colors = get_palette_colors(obj, settings.palette_columns, settings.palette_rows)
+            for row_index, row_colors in enumerate(colors):
+                row = layout.row()
+                for col_index, color in enumerate(row_colors):
+                    # Format the color tuple into a readable string
+                    index = row_index * settings.palette_columns + col_index
+                    color_str = str(index)
+                    operator = row.operator("material.set_face_color", text=color_str, icon='COLOR')
+                    operator.color_index = index
+        else:
+            layout.label(text="No active object.")
 
         layout.separator()
         layout.label(text="AO Baking")
@@ -639,6 +698,7 @@ class MATERIAL_PT_custom_panel(Panel):
         col.operator("material.view_both", text="View Both")
 
 def register():
+
     bpy.utils.register_class(ExtendedMaterialSettings)
     bpy.types.Scene.extended_material_settings = bpy.props.PointerProperty(type=ExtendedMaterialSettings)
 
