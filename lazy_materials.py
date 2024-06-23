@@ -11,6 +11,7 @@ bl_info = {
 }
 
 import bpy
+import bmesh
 from bpy.types import Operator, Panel
 from bpy.props import IntProperty
 import math as m
@@ -430,19 +431,19 @@ class MATERIAL_OT_default_palette(Operator):
 
     def execute(self, context):
         # Color palette defined as (R, G, B) tuples
-        DEFAULT_PALETTE = [
+        DEFAULT_PALETTE =  [
         # 6 tones of cool grey
-        (0.5, 0.5, 0.55), (0.45, 0.45, 0.5), (0.4, 0.4, 0.45), (0.35, 0.35, 0.4), (0.3, 0.3, 0.35), (0.25, 0.25, 0.3),
+        (0.5, 0.5, 0.6), (0.48, 0.5, 0.55), (0.46, 0.52, 0.55), (0.5, 0.5, 0.55), (0.4, 0.4, 0.45), (0.3, 0.3, 0.35), 
         # 6 tones of warm grey
         (0.5, 0.5, 0.4), (0.45, 0.45, 0.35), (0.4, 0.4, 0.3), (0.35, 0.35, 0.25), (0.3, 0.3, 0.2), (0.25, 0.25, 0.15),
         # 3 of warm brown, 3 of yellow brown
         (0.45, 0.3, 0.1), (0.4, 0.25, 0.05), (0.35, 0.2, 0), (0.55, 0.45, 0.1), (0.5, 0.4, 0.05), (0.45, 0.35, 0),
         # 3 of red, 3 of blue
         (0.7, 0.2, 0.2), (0.6, 0.1, 0.1), (0.5, 0, 0), (0.2, 0.2, 0.7), (0.1, 0.1, 0.6), (0, 0, 0.5),
-        # 3 of orange, 3 of light cream
-        (1.0, 0.6, 0.2), (0.9, 0.5, 0.1), (0.8, 0.4, 0), (0.98, 0.98, 0.8), (0.96, 0.96, 0.7), (0.94, 0.94, 0.6),
-        # 3 of warm green, 3 of hard green
-        (0.3, 0.5, 0.3), (0.25, 0.45, 0.25), (0.2, 0.4, 0.2), (0.1, 0.5, 0.1), (0.05, 0.45, 0.05), (0, 0.4, 0)
+        # 6 tones of beige
+        (0.90, 0.75, 0.65), (0.87, 0.70, 0.55), (0.83, 0.65, 0.50), (0.95, 0.87, 0.76), (0.80, 0.72, 0.60), (0.86, 0.80, 0.68),
+        # 3 of warm green, 3 of hard green 
+        (0.3, 0.5, 0.3), (0.2, 0.45, 0.25), (0.1, 0.4, 0.2), (0.05, 0.55, 0.25), (0.02, 0.5, 0.2), (0, 0.45, 0.15)
         ]
         
         obj = context.active_object
@@ -509,9 +510,15 @@ class MATERIAL_OT_set_face_color(Operator):
 
     def execute(self, context):
         obj = context.object
-        mesh = obj.data
+
+        # Forcing update of the mesh.
+        # # TODO there should be a better way?
+        # bpy.ops.object.mode_set(mode='OBJECT')  # Switch to object mode
+        # bpy.ops.object.mode_set(mode='EDIT')    # Switch back to edit mode
 
         # Collect indices of selected faces
+        obj.update_from_editmode()
+        mesh = obj.data
         selected_faces = [p.index for p in mesh.polygons if p.select]
 
         # Call the function to assign UV coordinates based on the color index
