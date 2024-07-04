@@ -206,7 +206,7 @@ class LAZYCHIP_OP_applydamage(Operator):
             context.view_layer.objects.active = current_mesh
             
             # Setting the shading to flat!
-            context.object.data.use_auto_smooth = False
+            #context.object.data.use_auto_smooth = False
             bpy.ops.object.shade_flat()
             
             # Creating a temporary clone and renaming it 
