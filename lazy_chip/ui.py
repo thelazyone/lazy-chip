@@ -15,6 +15,7 @@ class WeatheringProps(PropertyGroup):
     fixed_scale_property: FloatProperty(name="Noise Scale", default=1, min=0, max=20)
     attempts_property: IntProperty(name="Attempts", default=5, min=1, max=100, description="Number of times the script attempts to apply its logic before giving up")
     fix_between_steps_property: bpy.props.BoolProperty(name="Fix Between Steps", default=True)
+    simplify_damage_ratio_property: FloatProperty(name="Simplify Damage Ratio",default=0.5,min=0.05,max=1.0,description="Ratio for mesh decimation to simplify damage (1 = no decimation)")
 
 
 class WeatheringPanel(Panel):
@@ -28,22 +29,57 @@ class WeatheringPanel(Panel):
         layout = self.layout
         scene = context.scene
         scene_pointer = scene.weathering_props
+
+        # Header
         curr_column = layout.column()
         curr_column.label(text="Lazy Chip", icon='CUBE')
+
+        # Settings
         curr_column = layout.column(align=True)
         curr_column.label(text="Settings:")
         curr_column.prop(scene_pointer, "resolution_property")
-        curr_column = layout.column(align=True)
         curr_column.prop(scene_pointer, "edge_relax_property")
         curr_column.prop(scene_pointer, "edge_push_property")
-        curr_column = layout.column(align=True)
         curr_column.prop(scene_pointer, "noise_scale_property")
         curr_column.prop(scene_pointer, "noise_strength_property")
         curr_column.prop(scene_pointer, "noise_contrast_property")
-        curr_column = layout.column(align=True)
         curr_column.prop(scene_pointer, "seed_property")
         curr_column.prop(scene_pointer, "random_seed_property")
         curr_column.operator("lazychip.op_setdefaultsettings")
+
+        # Proportions
+        curr_column.separator()
+        curr_column.label(text="Proportions:")
+        curr_column.prop(scene_pointer, "fixed_scale_check_property")
+        curr_column.prop(scene_pointer, "fixed_scale_property")
+
+        # Attempts and Simplify Damage Ratio
+        curr_column.separator()
+        curr_column.prop(scene_pointer, "attempts_property")
+        curr_column.prop(scene_pointer, "simplify_damage_ratio_property")
+
+        # Fix Between Steps
+        curr_column.separator()
+        curr_column.prop(scene_pointer, "fix_between_steps_property")
+
+        # Operators with increased scale
+        curr_column.separator()
+        operator_column = layout.column(align=True)
+        operator_column.scale_y = 1.5
+        operator_column.operator("lazychip.op_removedamage")
+        operator_column.operator("lazychip.op_applydamage")
+        operator_column.operator("lazychip.op_clearstash")
+
+        curr_column.separator()
+        curr_column.operator("lazychip.op_fixmanifold")
+
+        # Selected Objects
+        curr_column.separator()
+        curr_column.label(text="Selected objects: " + str(
+            [curr_object.name for curr_object in context.selected_objects if curr_object.type == 'MESH']))
+
+        # Material Operators
+        curr_column.separator()
         curr_column.label(text="Wood:")
         curr_column.operator("lazychip.op_woodsmoothing")
         curr_column.operator("lazychip.op_woodchipping")
@@ -55,29 +91,6 @@ class WeatheringPanel(Panel):
         curr_column.operator("lazychip.op_concretechippingsurface")
         curr_column.operator("lazychip.op_concretechippingedges")
         curr_column.operator("lazychip.op_concreteheavyweathering")
-        curr_column = layout.column()
-        curr_column.label(text="Selected objects: " + str(
-            [curr_object.name for curr_object in context.selected_objects if curr_object.type == 'MESH']))
-        
-        curr_column.separator()
-        curr_column.prop(scene_pointer, "fix_between_steps_property")
-
-        curr_column = layout.column(align=True)
-        curr_column.scale_y = 1.5
-
-        curr_column.separator()
-        curr_column.prop(scene_pointer, "attempts_property")
-        curr_column.operator("lazychip.op_removedamage")
-        curr_column.operator("lazychip.op_applydamage")
-        curr_column.operator("lazychip.op_clearstash")
-
-        curr_column.separator()
-        curr_column.operator("lazychip.op_fixmanifold")
-
-        curr_column = layout.column(align=True)
-        curr_column.label(text="Proportions:")
-        curr_column.prop(scene_pointer, "fixed_scale_check_property")
-        curr_column.prop(scene_pointer, "fixed_scale_property")
 
 # TO BE DONE PROPERLY
 class LazyChipInfoPanel(Panel):

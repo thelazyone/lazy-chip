@@ -167,7 +167,7 @@ class LAZYCHIP_OP_applydamage(Operator):
         # **Apply Decimate Modifier Before Converting to Mesh**
         # At this point, all modifiers except decimation are added
         # Now, add the Decimate modifier
-        decimate_ratio = 0.1  # Adjust as needed or make it a property
+        decimate_ratio = scene.weathering_props.simplify_damage_ratio_property
         decimate_modifier = i_selected_object.modifiers.new(name="Decimate", type='DECIMATE')
         decimate_modifier.ratio = decimate_ratio
         self.report({'INFO'}, f"Decimate modifier added with ratio {decimate_ratio}.")
