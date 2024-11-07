@@ -1,7 +1,8 @@
+
 bl_info = {
     "name": "Extended Materials and UV Tools",
     "author": "thelazyone",
-    "version": (1, 0),
+    "version": (1, 1),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Lazy Tools",
     "description": "Provides multiple tools for handling materials and UV maps",
@@ -17,6 +18,49 @@ from bpy.props import IntProperty
 import math as m
 import random   # for UV settings
 import colorsys  # for Palette
+
+
+class MATERIAL_OT_assign_faces_random(Operator):
+    bl_idname = "material.assign_faces_random"
+    bl_label = "Assign Faces At Random"
+    bl_description = "Assigns faces to random color tiles"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+
+        # Initialize all faces randomly and position UVs
+        initialize_all_faces_random(context)
+
+        return {'FINISHED'}
+
+
+def get_palette_colors(obj, num_columns, num_rows):
+    """Retrieve colors from an image based on a grid layout."""
+    texture_color_name = "colorpalette"  # Use the shared texture name
+    image = bpy.data.images.get(texture_color_name)
+    if not image:
+        print(f"Image {texture_color_name} not found!")
+        return []
+    
+    width, height = image.size
+    colors = []
+    for row in range(num_rows):
+        row_colors = []
+        for col in range(num_columns):
+            x = (col + 0.5) / num_columns
+            y = (row + 0.5) / num_rows
+            x_pixel = int(x * width)
+            y_pixel = int(y * height)
+    
+            # Clamp to image bounds
+            x_pixel = max(0, min(x_pixel, width - 1))
+            y_pixel = max(0, min(y_pixel, height - 1))
+    
+            index = (y_pixel * width + x_pixel) * 4  # 4 for RGBA
+            r, g, b, a = image.pixels[index:index+4]
+            row_colors.append((r, g, b))
+        colors.append(row_colors)
+    return colors
 
 
 # Setting for the plugin.
@@ -42,7 +86,7 @@ class MATERIAL_OT_delete_materials(Operator):
     def poll(cls, context):
         return context.object is not None and \
             context.object.type == 'MESH' and  \
-            len(context.selected_objects) == 1 and \
+            len(context.selected_objects) >= 1 and \
             context.mode == 'OBJECT'
         
     def execute(self, context):
@@ -62,25 +106,97 @@ class MATERIAL_OT_generate_materials(Operator):
     @classmethod
     def poll(cls, context):
         return context.object is not None and context.object.type == 'MESH' and \
-            len(context.selected_objects) == 1 and context.mode == 'OBJECT'
+            len(context.selected_objects) >= 1 and context.mode == 'OBJECT'
     
     def execute(self, context):
+    
+        # Check if the Blender file is saved
+        if not bpy.data.filepath:
+            self.report({'ERROR'}, "Please save your Blender file before running this operation.")
+            return {'CANCELLED'}
+        
         selected_objects = context.selected_objects
+
+        # Define shared names
+        texture_color_name = "colorpalette"
+        texture_ao_name = "texture_ao"
+        material_color_name = "Material_Color"
+        material_ao_name = "Material_AO"
+
+        # Create or get the shared textures
+        if texture_color_name not in bpy.data.images:
+            texture_color = bpy.data.images.new(name=texture_color_name, width=1024, height=1024, alpha=True)
+            # Fill the image with green color
+            fill_color = (0.0, 1.0, 0.0, 1.0)  # RGBA for green
+            texture_color.pixels = [val for _ in range(texture_color.size[0] * texture_color.size[1]) for val in fill_color]
+            
+            # Get the directory of the Blender file
+            blend_dir = os.path.dirname(bpy.data.filepath)
+            # Define the image file path
+            image_path = os.path.join(blend_dir, "colorpalette.png")
+
+            # Set the image filepath and save the image
+            texture_color.filepath = image_path
+            texture_color.file_format = 'PNG'
+            texture_color.save()
+        else:
+            texture_color = bpy.data.images[texture_color_name]
+
+        if texture_ao_name not in bpy.data.images:
+            texture_ao = bpy.data.images.new(name=texture_ao_name, width=1024, height=1024, alpha=True)
+            # Fill the image with white color
+            fill_color = (1.0, 1.0, 1.0, 1.0)  # RGBA for white
+            texture_ao.pixels = [val for _ in range(texture_ao.size[0] * texture_ao.size[1]) for val in fill_color]
+        else:
+            texture_ao = bpy.data.images[texture_ao_name]
+
+        # Create or get the shared materials
+        mat_color = bpy.data.materials.get(material_color_name) or bpy.data.materials.new(name=material_color_name)
+        mat_ao = bpy.data.materials.get(material_ao_name) or bpy.data.materials.new(name=material_ao_name)
+
+        # Setup material node tree for color
+        mat_color.use_nodes = True
+        if mat_color.node_tree.nodes.get('Texture Image Node') is None:
+            mat_color.use_nodes = True
+            nodes = mat_color.node_tree.nodes
+            nodes.clear()
+            output_node = nodes.new(type='ShaderNodeOutputMaterial')
+            bsdf_node = nodes.new(type='ShaderNodeBsdfPrincipled')
+            tex_image_color = nodes.new('ShaderNodeTexImage')
+            tex_image_color.image = texture_color
+            tex_image_color.name = 'Texture Image Node'
+            uv_map_color = nodes.new('ShaderNodeUVMap')
+            uv_map_color.uv_map = "uv_color"
+            mat_color.node_tree.links.new(uv_map_color.outputs['UV'], tex_image_color.inputs['Vector'])
+            mat_color.node_tree.links.new(tex_image_color.outputs['Color'], bsdf_node.inputs['Base Color'])
+            mat_color.node_tree.links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
+
+        # Setup material node tree for AO
+        mat_ao.use_nodes = True
+        if mat_ao.node_tree.nodes.get('Texture AO Node') is None:
+            mat_ao.use_nodes = True
+            nodes = mat_ao.node_tree.nodes
+            nodes.clear()
+            output_node = nodes.new(type='ShaderNodeOutputMaterial')
+            bsdf_node = nodes.new(type='ShaderNodeBsdfPrincipled')
+            tex_image_ao = nodes.new('ShaderNodeTexImage')
+            tex_image_ao.image = texture_ao
+            tex_image_ao.name = 'Texture AO Node'
+            uv_map_ao = nodes.new('ShaderNodeUVMap')
+            uv_map_ao.uv_map = "uv_ao"
+            mat_ao.node_tree.links.new(uv_map_ao.outputs['UV'], tex_image_ao.inputs['Vector'])
+            mat_ao.node_tree.links.new(tex_image_ao.outputs['Color'], bsdf_node.inputs['Base Color'])
+            mat_ao.node_tree.links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
+
+        # For each selected object
         for obj in selected_objects:
             if obj.type == 'MESH':
-                
                 # Apply transformations
                 bpy.context.view_layer.objects.active = obj
                 bpy.ops.object.mode_set(mode='OBJECT')
                 bpy.ops.object.select_all(action='DESELECT')
                 obj.select_set(True)
                 bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
-
-                # Define unique names based on the object name
-                texture_color_name = f"{obj.name}_texture_color"
-                texture_ao_name = f"{obj.name}_texture_ao"
-                material_color_name = f"{obj.name}_Material_Color"
-                material_ao_name = f"{obj.name}_Material_AO"
 
                 # Ensure UV maps are added if they do not exist
                 uv_layers = obj.data.uv_layers
@@ -94,7 +210,6 @@ class MATERIAL_OT_generate_materials(Operator):
                 bpy.ops.object.mode_set(mode='EDIT')
 
                 # Unwrap each UV map separately with adjusted settings
-                bpy.ops.object.mode_set(mode='EDIT')
                 for uv_name in ["uv_color", "uv_ao"]:
                     uv_layers.active = uv_layers[uv_name]
                     bpy.ops.mesh.select_all(action='SELECT')
@@ -110,6 +225,7 @@ class MATERIAL_OT_generate_materials(Operator):
                 # Switch back to object mode after unwrapping
                 bpy.ops.object.mode_set(mode='OBJECT')
 
+                
                 # Manage existing textures
                 old_texture_color = bpy.data.images.get(texture_color_name)
                 if old_texture_color:
@@ -177,7 +293,7 @@ class MATERIAL_OT_generate_materials(Operator):
                 obj.data.materials.append(mat_color)
                 obj.data.materials.append(mat_ao)
 
-        self.report({'INFO'}, "UV maps, textures, and materials uniquely created or updated for each object")
+        self.report({'INFO'}, "UV maps, textures, and materials created or updated for selected objects")
         return {'FINISHED'}
     
 class MATERIAL_OT_view_color(bpy.types.Operator):
@@ -187,7 +303,7 @@ class MATERIAL_OT_view_color(bpy.types.Operator):
     
     def execute(self, context):
         obj = context.object
-        mat_color_name = f"{obj.name}_Material_Color"
+        mat_color_name = "Material_Color"
         mat_color = bpy.data.materials.get(mat_color_name)
 
         if mat_color and mat_color.name not in [mat.name for mat in obj.data.materials]:
@@ -205,7 +321,7 @@ class MATERIAL_OT_view_ao(bpy.types.Operator):
     
     def execute(self, context):
         obj = context.object
-        mat_ao_name = f"{obj.name}_Material_AO"
+        mat_ao_name = "Material_AO"
         mat_ao = bpy.data.materials.get(mat_ao_name)
 
         if mat_ao and mat_ao.name not in [mat.name for mat in obj.data.materials]:
@@ -216,7 +332,7 @@ class MATERIAL_OT_view_ao(bpy.types.Operator):
         self.report({'INFO'}, "Viewing AO Material")
         return {'FINISHED'}
 
-    
+
 
 class MATERIAL_OT_view_both(bpy.types.Operator):
     bl_idname = "material.view_both"
@@ -230,7 +346,7 @@ class MATERIAL_OT_view_both(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.object
-        combined_mat_name = f"{obj.name}_Combined_Material"
+        combined_mat_name = "Combined_Material"
 
         # Check if the combined material already exists, otherwise create it
         combined_mat = bpy.data.materials.get(combined_mat_name)
@@ -244,9 +360,9 @@ class MATERIAL_OT_view_both(bpy.types.Operator):
 
         # Create nodes for the color and AO textures
         color_tex_node = nodes.new('ShaderNodeTexImage')
-        color_tex_node.image = bpy.data.images.get(f"{obj.name}_texture_color")
+        color_tex_node.image = bpy.data.images.get("colorpalette")
         ao_tex_node = nodes.new('ShaderNodeTexImage')
-        ao_tex_node.image = bpy.data.images.get(f"{obj.name}_texture_ao")
+        ao_tex_node.image = bpy.data.images.get("texture_ao")
 
         # Create UV Map nodes for each texture
         uv_color_node = nodes.new('ShaderNodeUVMap')
@@ -258,6 +374,9 @@ class MATERIAL_OT_view_both(bpy.types.Operator):
         mix_node = nodes.new('ShaderNodeMixRGB')
         mix_node.blend_type = 'MULTIPLY'
 
+        # Principled BSDF node
+        bsdf_node = nodes.new('ShaderNodeBsdfPrincipled')
+
         # Output node
         output_node = nodes.new('ShaderNodeOutputMaterial')
 
@@ -267,7 +386,8 @@ class MATERIAL_OT_view_both(bpy.types.Operator):
         links.new(uv_ao_node.outputs['UV'], ao_tex_node.inputs['Vector'])
         links.new(color_tex_node.outputs['Color'], mix_node.inputs[1])
         links.new(ao_tex_node.outputs['Color'], mix_node.inputs[2])
-        links.new(mix_node.outputs['Color'], output_node.inputs['Surface'])
+        links.new(mix_node.outputs['Color'], bsdf_node.inputs['Base Color'])
+        links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
 
         # Apply the combined material to the object if not already applied
         if combined_mat_name not in [mat.name for mat in obj.data.materials]:
@@ -278,90 +398,9 @@ class MATERIAL_OT_view_both(bpy.types.Operator):
         self.report({'INFO'}, "Combined material applied")
         return {'FINISHED'}
 
-# FACES MANIPULATION!
-
-def color_index_to_xy(context, index):  
-    settings = context.scene.extended_material_settings
-    palette_columns = settings.palette_columns
-    tile_x = (index % palette_columns)
-    tile_y = (index // palette_columns)
-    return (tile_x, tile_y)
-
-def random_color():
-    """Generate a random color."""
-    hue = random.random()  # Random hue
-    saturation = 0.75  # Fixed saturation
-    value = 1.0  # Fixed value
-    return colorsys.hsv_to_rgb(hue, saturation, value)  # Returns an RGB tuple
 
 
-def initialize_all_faces_random(context):
-    obj = context.object
-    mesh = obj.data
-    settings = context.scene.extended_material_settings
-    num_colors = settings.palette_columns * settings.palette_rows
-
-    if num_colors == 0:
-        return  # Avoid division by zero if no colors are defined
-
-    # Store the current mode, and switch to Edit Mode to ensure full access to the mesh
-    current_mode = bpy.context.object.mode
-    bpy.ops.object.mode_set(mode='EDIT')
-
-    # Collect indices of all faces
-    all_faces = [p.index for p in mesh.polygons]
-    random.shuffle(all_faces)  # Shuffle to randomize distribution
-
-    # Split into groups for each color
-    face_groups = {i: [] for i in range(num_colors)}
-    for i, face_index in enumerate(all_faces):
-        color_group_index = i % num_colors
-        face_groups[color_group_index].append(face_index)
-
-    # Assign each group of faces to a corresponding color
-    for color_index, faces in face_groups.items():
-        assign_faces_to_color(context, faces, color_index)
-
-    # Restore the original mode
-    bpy.ops.object.mode_set(mode=current_mode)
-
-
-def assign_faces_to_color(context, faces, color_index):
-    obj = context.object
-    mesh = obj.data
-
-    # Store the current mode and switch to object mode to manipulate UVs safely
-    current_mode = bpy.context.object.mode
-    bpy.ops.object.mode_set(mode='OBJECT')
-
-    if "uv_color" not in mesh.uv_layers:
-        mesh.uv_layers.new(name="uv_color")
-    
-    uv_layer = mesh.uv_layers["uv_color"].data
-
-    settings = context.scene.extended_material_settings
-    palette_rows = settings.palette_rows
-    palette_columns = settings.palette_columns
-    
-    tile_width = 1 / palette_columns
-    tile_height = 1 / palette_rows
-    
-    row = color_index // palette_columns
-    col = color_index % palette_columns
-    tile_x = (col + 0.5) * tile_width
-    tile_y = (row + 0.5) * tile_height
-
-    # Apply UV modifications
-    for face_idx in faces:
-        poly = mesh.polygons[face_idx]
-        for loop_index in poly.loop_indices:
-            loop_uv = uv_layer[loop_index]
-            loop_uv.uv = (tile_x, tile_y)
-
-    # Restore the original mode
-    bpy.ops.object.mode_set(mode=current_mode)
-
-
+# In the MATERIAL_OT_create_palette operator, ensure the texture is saved as "colorpalette.png":
 class MATERIAL_OT_create_palette(Operator):
     bl_idname = "material.create_palette"
     bl_label = "Create Color Palette"
@@ -375,8 +414,12 @@ class MATERIAL_OT_create_palette(Operator):
                context.mode == 'OBJECT'
     
     def execute(self, context):
-        obj = context.active_object
-        texture_name = f"{obj.name}_texture_color"
+        # Check if the Blender file is saved
+        if not bpy.data.filepath:
+            self.report({'ERROR'}, "Please save your Blender file before creating the palette.")
+            return {'CANCELLED'}
+            
+        texture_name = "colorpalette"
         texture = bpy.data.images.get(texture_name)
         if not texture:
             self.report({'ERROR'}, "Texture not found")
@@ -407,21 +450,21 @@ class MATERIAL_OT_create_palette(Operator):
         texture.pixels = pixels
         texture.update()
 
-        self.report({'INFO'}, "Color palette created and faces initialized")
+        # Save the texture as "colorpalette.png"
+        # Get the directory of the Blender file
+        blend_dir = os.path.dirname(bpy.data.filepath)
+        # Define the image file path
+        image_path = os.path.join(blend_dir, "colorpalette.png")
+
+        # Set the image filepath and save the image
+        texture.filepath = image_path
+        texture.file_format = 'PNG'
+        texture.save()
+
+        self.report({'INFO'}, "Color palette created and saved as colorpalette.png")
         return {'FINISHED'}
-    
-class MATERIAL_OT_assign_faces_random(Operator):
-    bl_idname = "material.assign_faces_random"
-    bl_label = "Assign Faces At Random"
-    bl_description = "Assigns faces to random color tiles"
-    bl_options = {'REGISTER', 'UNDO'}
 
-    def execute(self, context):
-
-        # Initialize all faces randomly and position UVs
-        initialize_all_faces_random(context)
-
-        return {'FINISHED'}
+# Similarly, update the MATERIAL_OT_default_palette operator:
 
 class MATERIAL_OT_default_palette(Operator):
     bl_idname = "material.default_palette"
@@ -446,8 +489,7 @@ class MATERIAL_OT_default_palette(Operator):
         (0.3, 0.5, 0.3), (0.2, 0.45, 0.25), (0.1, 0.4, 0.2), (0.05, 0.55, 0.25), (0.02, 0.5, 0.2), (0, 0.45, 0.15)
         ]
         
-        obj = context.active_object
-        texture_name = f"{obj.name}_texture_color"
+        texture_name = "colorpalette"
         texture = bpy.data.images.get(texture_name)
         if not texture:
             self.report({'ERROR'}, "Texture not found")
@@ -466,7 +508,7 @@ class MATERIAL_OT_default_palette(Operator):
         cell_width = int(width / palette_columns)
         cell_height = int(height / palette_rows)
 
-        # Iterate over each cell in the grid, assigning colors from the STANDARD_PALETTE
+        # Iterate over each cell in the grid, assigning colors from the DEFAULT_PALETTE
         color_index = 0
         for row in range(palette_rows):
             for col in range(palette_columns):
@@ -484,8 +526,15 @@ class MATERIAL_OT_default_palette(Operator):
         texture.pixels = pixels
         texture.update()
 
-        self.report({'INFO'}, "Standard color palette created and applied")
+        # Save the texture as "colorpalette.png"
+        texture.filepath_raw = bpy.path.abspath("//colorpalette.png")
+        texture.file_format = 'PNG'
+        texture.save()
+
+        self.report({'INFO'}, "Default color palette created and saved as colorpalette.png")
         return {'FINISHED'}
+
+
     
 
 class MATERIAL_OT_set_face_color(Operator):
@@ -504,29 +553,41 @@ class MATERIAL_OT_set_face_color(Operator):
     @classmethod
     def poll(cls, context):
         return context.object is not None and \
-            "uv_color" in context.object.data.uv_layers.keys() and \
-            context.mode == 'EDIT_MESH' and \
-            context.object.data.total_face_sel > 0
+               "uv_color" in context.object.data.uv_layers.keys() and \
+               context.mode in {'EDIT_MESH', 'OBJECT'}
 
     def execute(self, context):
-        obj = context.object
+        if context.mode == 'OBJECT':
+            objects = context.selected_objects
+        elif context.mode == 'EDIT_MESH':
+            objects = [context.active_object]
+        else:
+            self.report({'ERROR'}, "Unsupported mode")
+            return {'CANCELLED'}
 
-        # Forcing update of the mesh.
-        # # TODO there should be a better way?
-        # bpy.ops.object.mode_set(mode='OBJECT')  # Switch to object mode
-        # bpy.ops.object.mode_set(mode='EDIT')    # Switch back to edit mode
+        for obj in objects:
+            if obj.type != 'MESH':
+                continue
+            mesh = obj.data
 
-        # Collect indices of selected faces
-        obj.update_from_editmode()
-        mesh = obj.data
-        selected_faces = [p.index for p in mesh.polygons if p.select]
+            if context.mode == 'EDIT_MESH' and obj == context.active_object:
+                # In Edit Mode, get selected faces
+                obj.update_from_editmode()
+                selected_faces = [p.index for p in mesh.polygons if p.select]
+                if not selected_faces:
+                    self.report({'INFO'}, "No faces selected, assigning color to all faces")
+                    selected_faces = [p.index for p in mesh.polygons]
+            else:
+                # In Object Mode or for other objects, assign to all faces
+                selected_faces = [p.index for p in mesh.polygons]
 
-        # Call the function to assign UV coordinates based on the color index
-        assign_faces_to_color(context, selected_faces, self.color_index)
+            # Assign the color index to the faces
+            assign_faces_to_color(context, selected_faces, self.color_index, obj)
 
         self.report({'INFO'}, f"Faces color set to index {self.color_index}")
         return {'FINISHED'}
-    
+        
+        
 
 class MATERIAL_OT_bake_ao(Operator):
     bl_idname = "material.bake_ao"
@@ -540,18 +601,18 @@ class MATERIAL_OT_bake_ao(Operator):
         return obj is not None and \
                "uv_ao" in obj.data.uv_layers.keys() and \
                obj.type == 'MESH' and \
-               len(context.selected_objects) == 1 and \
+               len(context.selected_objects) >= 1 and \
                context.mode == 'OBJECT'
 
     def execute(self, context):
         # Ensure the scene's renderer is set to Cycles
         context.scene.render.engine = 'CYCLES'
 
-        obj = context.active_object
+        selected_objects = context.selected_objects
 
-        # Define unique material and texture names based on object name
-        material_ao_name = f"{obj.name}_Material_AO"
-        texture_ao_name = f"{obj.name}_texture_ao"
+        # Define shared names
+        material_ao_name = "Material_AO"
+        texture_ao_name = "texture_ao"
 
         # Find or create the AO material and image
         mat_ao = bpy.data.materials.get(material_ao_name)
@@ -564,82 +625,36 @@ class MATERIAL_OT_bake_ao(Operator):
             self.report({'ERROR'}, "AO Texture not found: " + texture_ao_name)
             return {'CANCELLED'}
         
-        # Prepare the object for baking by selecting it and assigning the AO material
-        bpy.ops.object.select_all(action='DESELECT')
-        obj.select_set(True)
-        context.view_layer.objects.active = obj
+        for obj in selected_objects:
+            if obj.type == 'MESH':
+                # Prepare the object for baking by selecting it and assigning the AO material
+                bpy.ops.object.select_all(action='DESELECT')
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
 
-        obj.data.materials.clear()
-        obj.data.materials.append(mat_ao)
+                obj.data.materials.clear()
+                obj.data.materials.append(mat_ao)
 
-        # Create a new image node for the AO texture and set it as active for baking
-        node_tree = mat_ao.node_tree
-        bake_node = node_tree.nodes.new(type='ShaderNodeTexImage')
-        bake_node.image = image_ao
-        node_tree.nodes.active = bake_node
+                # Create a new image node for the AO texture and set it as active for baking
+                node_tree = mat_ao.node_tree
+                bake_node = node_tree.nodes.new(type='ShaderNodeTexImage')
+                bake_node.image = image_ao
+                node_tree.nodes.active = bake_node
 
-        # Configure bake settings
-        context.scene.cycles.bake_type = 'AO'
-        context.scene.render.bake.use_selected_to_active = False
-        context.scene.render.bake.use_clear = True
-        context.scene.render.bake.margin = 2  # Adjust based on your needs
+                # Configure bake settings
+                context.scene.cycles.bake_type = 'AO'
+                context.scene.render.bake.use_selected_to_active = False
+                context.scene.render.bake.use_clear = True
+                context.scene.render.bake.margin = 2  # Adjust based on your needs
 
-        # Perform the bake
-        bpy.ops.object.bake(type='AO')
+                # Perform the bake
+                bpy.ops.object.bake(type='AO')
 
-        # Clean up: remove the temporary image node
-        node_tree.nodes.remove(bake_node)
+                # Clean up: remove the temporary image node
+                node_tree.nodes.remove(bake_node)
 
-        self.report({'INFO'}, "AO baked successfully")
+        self.report({'INFO'}, "AO baked successfully for selected objects")
         return {'FINISHED'}
-    
-
-### Color picking
-
-def sample_texture_color(image, x, y):
-    """ Samples the color from the image at normalized coordinates (x, y). """
-    width, height = image.size
-    x_pixel = int(x * width)
-    y_pixel = int(y * height)
-
-    # Ensure we do not go out of bounds
-    x_pixel = max(0, min(x_pixel, width - 1))
-    y_pixel = max(0, min(y_pixel, height - 1))
-
-    # Calculate the index in the flat pixel array
-    index = (y_pixel * width + x_pixel) * 4  # 4 for RGBA
-    r, g, b, a = image.pixels[index:index+4]
-
-    return (r, g, b)
-
-
-def get_palette_colors(obj, num_columns, num_rows):
-    """Retrieve colors from an image based on a grid layout."""
-    texture_color_name = f"{obj.name}_texture_color"  # Adjust based on actual usage
-    image = bpy.data.images.get(texture_color_name)
-    if not image:
-        print(f"Image {texture_color_name} not found!")
-        return []
-
-    width, height = image.size
-    colors = []
-    for row in range(num_rows):
-        row_colors = []
-        for col in range(num_columns):
-            x = (col + 0.5) / num_columns
-            y = (row + 0.5) / num_rows
-            x_pixel = int(x * width)
-            y_pixel = int(y * height)
-
-            # Clamp to image bounds
-            x_pixel = max(0, min(x_pixel, width - 1))
-            y_pixel = max(0, min(y_pixel, height - 1))
-
-            index = (y_pixel * width + x_pixel) * 4  # 4 for RGBA
-            r, g, b, a = image.pixels[index:index+4]
-            row_colors.append((r, g, b))
-        colors.append(row_colors)
-    return colors
 
 
 class MATERIAL_PT_custom_panel(Panel):
@@ -648,13 +663,13 @@ class MATERIAL_PT_custom_panel(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
     bl_category = 'Lazy Tools'
-    bl_context = "" # If nothing is set here it'll work in edit mode too.
-
+    bl_context = ""
 
     def draw(self, context):
         layout = self.layout
         settings = context.scene.extended_material_settings
 
+      
         layout.operator(MATERIAL_OT_delete_materials.bl_idname)
 
         layout.separator()
@@ -675,21 +690,25 @@ class MATERIAL_PT_custom_panel(Panel):
         layout.separator()
         layout.label(text="Set Face Color")
         col = layout.column()
-        col.enabled = context.mode == 'EDIT_MESH' and context.active_object.data.total_face_sel > 0
+        col.enabled = context.mode in {'EDIT_MESH', 'OBJECT'} and context.object is not None
+        
         obj = context.active_object
         if obj:
             colors = get_palette_colors(obj, settings.palette_columns, settings.palette_rows)
-            for row_index, row_colors in enumerate(colors):
-                row = layout.row()
-                for col_index, color in enumerate(row_colors):
-                    # Format the color tuple into a readable string
-                    index = row_index * settings.palette_columns + col_index
-                    color_str = str(index)
-                    operator = row.operator("material.set_face_color", text=color_str, icon='COLOR')
-                    operator.color_index = index
+            if colors:
+                for row_index, row_colors in enumerate(colors):
+                    row = layout.row()
+                    for col_index, color in enumerate(row_colors):
+                        index = row_index * settings.palette_columns + col_index
+                        color_str = str(index)
+                        operator = row.operator("material.set_face_color", text=color_str, icon='COLOR')
+                        operator.color_index = index
+            else:
+                col.label(text="No colors found in palette.")
         else:
             layout.label(text="No active object.")
 
+        
         layout.separator()
         layout.label(text="AO Baking")
         col = layout.column()
@@ -704,8 +723,44 @@ class MATERIAL_PT_custom_panel(Panel):
         row.operator("material.view_ao", text="View AO")
         col.operator("material.view_both", text="View Both")
 
-def register():
 
+def assign_faces_to_color(context, faces, color_index, obj):
+    mesh = obj.data
+
+    # Store the current mode and switch to object mode to manipulate UVs safely
+    current_mode = bpy.context.object.mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    if "uv_color" not in mesh.uv_layers:
+        mesh.uv_layers.new(name="uv_color")
+
+    uv_layer = mesh.uv_layers["uv_color"].data
+
+    settings = context.scene.extended_material_settings
+    palette_rows = settings.palette_rows
+    palette_columns = settings.palette_columns
+
+    tile_width = 1 / palette_columns
+    tile_height = 1 / palette_rows
+
+    row = color_index // palette_columns
+    col = color_index % palette_columns
+    tile_x = (col + 0.5) * tile_width
+    tile_y = (row + 0.5) * tile_height
+
+    # Apply UV modifications
+    for face_idx in faces:
+        poly = mesh.polygons[face_idx]
+        for loop_index in poly.loop_indices:
+            loop_uv = uv_layer[loop_index]
+            loop_uv.uv = (tile_x, tile_y)
+
+    # Restore the original mode
+    bpy.ops.object.mode_set(mode=current_mode)
+
+# Lastly, ensure that any other operator or function that references object-specific names is updated to use the shared names.
+
+def register():
     bpy.utils.register_class(ExtendedMaterialSettings)
     bpy.types.Scene.extended_material_settings = bpy.props.PointerProperty(type=ExtendedMaterialSettings)
 
