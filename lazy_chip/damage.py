@@ -103,8 +103,8 @@ class LAZYCHIP_OP_applydamage(Operator):
                 
     def apply_damage(self, context, i_selected_object):    
 
-        # TODO profiling only.
-        start_t = time.time()
+        # Start timing for performance profiling
+        start_t = time.time() 
 
         context.view_layer.objects.active = i_selected_object
         bpy.ops.object.convert(target='MESH')
@@ -164,8 +164,16 @@ class LAZYCHIP_OP_applydamage(Operator):
 
         self.report({'INFO'}, "SUB_T5: " + str(time.time() - start_t))
 
-        bpy.ops.object.convert(target='MESH')
+        # **Apply Decimate Modifier Before Converting to Mesh**
+        # At this point, all modifiers except decimation are added
+        # Now, add the Decimate modifier
+        decimate_ratio = 0.1  # Adjust as needed or make it a property
+        decimate_modifier = i_selected_object.modifiers.new(name="Decimate", type='DECIMATE')
+        decimate_modifier.ratio = decimate_ratio
+        self.report({'INFO'}, f"Decimate modifier added with ratio {decimate_ratio}.")
 
+        # Now, apply all modifiers by converting to mesh
+        bpy.ops.object.convert(target='MESH')
         self.report({'INFO'}, "SUB_T6: " + str(time.time() - start_t))
 
         bpy.data.textures.remove(noise_modifier)
@@ -173,8 +181,7 @@ class LAZYCHIP_OP_applydamage(Operator):
         i_selected_object.location.y -= random2
         i_selected_object.location.z -= random3
 
-        self.report({'INFO'}, "SUB_T7: " + str(time.time() - start_t))
-        
+        self.report({'INFO'}, "SUB_T7: " + str(time.time() - start_t))                
 
     def clone_object(self, context, i_selected_object):
         object_copy = i_selected_object.copy()
@@ -205,8 +212,7 @@ class LAZYCHIP_OP_applydamage(Operator):
             self.remove_damage(context, current_mesh)
             context.view_layer.objects.active = current_mesh
             
-            # Setting the shading to flat!
-            #context.object.data.use_auto_smooth = False
+            # Setting the shading to flat
             bpy.ops.object.shade_flat()
             
             # Creating a temporary clone and renaming it 
@@ -216,29 +222,24 @@ class LAZYCHIP_OP_applydamage(Operator):
             if hasattr(object_copy.data, "transform"):
                 object_copy.data.transform(copied_matrix_basis)
                 
-            # TODO profiling only.
+            # Start timing for performance profiling
             self.report({'INFO'}, "Starting the apply damage performance.")
             start_t = time.time()
 
-            # Applying the damage (and the bool modifier)
+            # Applying the damage (now includes decimation)
             self.apply_damage(context, object_copy)
 
-            self.report({'INFO'}, "T1: " + str(time.time() - start_t))
+            self.report({'INFO'}, "Damage applied in: " + str(time.time() - start_t) + " seconds.")
 
             copied_matrix_basis.invert()
-
-            self.report({'INFO'}, "T2: " + str(time.time() - start_t))
-
             if hasattr(object_copy.data, "transform"):
                 object_copy.data.transform(copied_matrix_basis)
             
-            self.report({'INFO'}, "T3: " + str(time.time() - start_t))
-
+            # Proceed with the boolean operation
             self.apply_boolean(context, object_copy, current_mesh)
-                
-            self.report({'INFO'}, "T3: " + str(time.time() - start_t))
-                
-            # Tricking into creating this fake object
+            self.report({'INFO'}, "Boolean operation applied.")
+
+            # Finalize the object
             current_mesh.data.use_fake_user = True
             object_copy.name = "LazyChip_tempObject"
             current_mesh.data = object_copy.data
@@ -250,7 +251,7 @@ class LAZYCHIP_OP_applydamage(Operator):
         for current_mesh in all_meshes:
             current_mesh.select_set(True)
         context.view_layer.objects.active = active_object
-        
+                
     def execute(self, context):
         self.report({'INFO'}, "Calling Execute. Applying damages...")
         self.report({'INFO'}, "AAA")
